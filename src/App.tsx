@@ -13,6 +13,7 @@ import { FxRateModal } from "./components/FxRateModal";
 import { TransfersList } from "./components/TransfersList";
 import { TransferForm } from "./components/TransferForm";
 import { LoadIssueBanner } from "./components/LoadIssueBanner";
+import { CloudSyncBar } from "./components/CloudSyncBar";
 import { formatDate } from "./lib/format";
 
 type Tab = "holdings" | "projections" | "history";
@@ -84,6 +85,7 @@ export default function App() {
 
   return (
     <div className="app">
+      <CloudSyncBar />
       <div className="app-header">
         <div>
           <h1>Portfolio Tracker</h1>
@@ -239,9 +241,10 @@ export default function App() {
       )}
 
       <div className="footer-note">
-        All data stays in this browser (localStorage) — nothing is sent anywhere except live price/FX lookups (CoinGecko for
-        crypto, Frankfurter for FX, both anonymous — no portfolio data leaves your device). Use "Export backup" regularly
-        since clearing browser data or switching devices loses it.
+        Data is kept in this browser (localStorage) and, if you sign in above, backed up to your private Firebase account
+        too — nothing else is sent anywhere except live price/FX lookups (CoinGecko for crypto, Frankfurter for FX, both
+        anonymous — no portfolio data leaves your device unless you sign in). Signed out, "Export backup" is worth doing
+        regularly since clearing browser data or switching devices loses it.
         {state.settings.fxRatesUpdatedAt && <> FX rates as of {formatDate(state.settings.fxRatesUpdatedAt)}.</>}
       </div>
     </div>

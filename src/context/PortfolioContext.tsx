@@ -4,6 +4,10 @@ import { loadState, saveState, exportStateAsFile, parseImportedState } from "../
 import { fetchFxRates } from "../lib/fx";
 import { refreshLivePrices, PriceRefreshResult } from "../lib/prices";
 import { newId } from "../lib/id";
+import { useAuth } from "./AuthContext";
+// lib/cloudSync (and the Firebase SDK it pulls in) is dynamically imported only where
+// actually used below — see AuthContext.tsx for why: this keeps the ~700KB SDK out of
+// the critical-path bundle for the (default, still fully supported) signed-out case.
 
 const AUTO_REFRESH_MS = 5 * 60 * 1000;
 
@@ -58,6 +62,8 @@ export function PortfolioProvider({ children }: { children: React.ReactNode }) {
   const [lastPriceResult, setLastPriceResult] = useState<PriceRefreshResult | null>(null);
   const stateRef = useRef(state);
   stateRef.current = state;
+  const loadIssueRef = useRef(loadIssue);
+  loadIssueRef.current = loadIssue;
 
   const dismissLoadIssue = useCallback(() => setLoadIssue(null), []);
 
@@ -69,6 +75,80 @@ export function PortfolioProvider({ children }: { children: React.ReactNode }) {
     if (loadIssue?.loadError) return;
     saveState(state);
   }, [state, loadIssue]);
+
+  // --- Cloud sync (Firebase) -------------------------------------------------------
+  // localStorage above stays the always-on local cache regardless of sign-in state.
+  // Signed in, this additionally mirrors the whole PortfolioState to/from a single
+  // Firestore doc at users/{uid}, so a corrupted or wiped browser storage on one
+  // device no longer means the data is gone — the cloud copy survives it. `user` is
+  // undefined while the initial auth check is in flight, null once resolved signed-out.
+  const { user } = useAuth();
+  // JSON snapshot of the state both sides last agreed on — the loop guard. A write only
+  // goes out if `state` no longer matches it; an incoming snapshot only gets adopted if
+  // it doesn't either. Either path updates it before touching the other side, so a
+  // round-trip echo is always a no-op instead of ping-ponging forever.
+  const lastSyncedJsonRef = useRef<string | null>(null);
+  const cloudReadyRef = useRef(false);
+  const migratedForUid = useRef<string | null>(null);
+
+  useEffect(() => {
+    if (user === undefined) return; // initial auth check still in flight
+    cloudReadyRef.current = false;
+    lastSyncedJsonRef.current = null;
+    if (user === null) return; // signed out — local-only, exactly as before Firebase existed
+
+    const uid = user.uid;
+    let unsubscribe: (() => void) | undefined;
+    let cancelled = false;
+
+    (async () => {
+      const cloudSync = await import("../lib/cloudSync");
+      if (cancelled) return;
+      if (migratedForUid.current !== uid) {
+        migratedForUid.current = uid;
+        const empty = await cloudSync.isCloudStateEmpty(uid);
+        if (cancelled) return;
+        // Don't seed the cloud from a local state we know is a placeholder for data we
+        // couldn't read — that would happily overwrite this account's first-ever cloud
+        // copy with nothing. Let the person resolve the load-issue banner first; if the
+        // cloud already has real data, the subscribe below adopts it regardless, which
+        // is exactly the recovery path a corrupted-storage device needs.
+        if (empty && !loadIssueRef.current?.loadError) {
+          const seed = stateRef.current;
+          await cloudSync.saveCloudState(uid, seed);
+          if (cancelled) return;
+          lastSyncedJsonRef.current = JSON.stringify(seed);
+        }
+      }
+      if (cancelled) return;
+      cloudReadyRef.current = true;
+      unsubscribe = cloudSync.subscribeCloudState(uid, (cloudState) => {
+        const json = JSON.stringify(cloudState);
+        if (json === lastSyncedJsonRef.current) return;
+        lastSyncedJsonRef.current = json;
+        setState(cloudState);
+        setLoadIssue(null); // a good cloud copy resolves any local load issue
+      });
+    })();
+
+    return () => {
+      cancelled = true;
+      unsubscribe?.();
+    };
+  }, [user]);
+
+  useEffect(() => {
+    if (!user || !cloudReadyRef.current || loadIssue?.loadError) return;
+    const json = JSON.stringify(state);
+    if (json === lastSyncedJsonRef.current) return;
+    lastSyncedJsonRef.current = json;
+    import("../lib/cloudSync")
+      .then((cloudSync) => cloudSync.saveCloudState(user.uid, state))
+      .catch(() => {
+        // Best-effort — Firestore's offline persistence queues and retries once back
+        // online; localStorage above remains the always-on safety net regardless.
+      });
+  }, [state, user, loadIssue]);
 
   const addHolding = useCallback((holding: Omit<Holding, "id">) => {
     setState((s) => ({ ...s, holdings: [...s.holdings, { ...holding, id: newId() }] }));
