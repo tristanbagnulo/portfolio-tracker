@@ -9,17 +9,13 @@ import { initializeFirestore, persistentLocalCache, persistentMultipleTabManager
 // code exactly like this. See lib/cloudSync.ts for what's actually protected, and by
 // what.
 //
-// These are PLACEHOLDER values. Swap in the real ones from Firebase Console →
-// Project settings → General → "Your apps" → Web app (</> icon) once the project
-// exists — nothing here works until they're real, but the app still runs fine signed
-// out (localStorage-only, exactly as before) in the meantime.
 const firebaseConfig = {
-  apiKey: "REPLACE_WITH_FIREBASE_API_KEY",
-  authDomain: "REPLACE_WITH_PROJECT_ID.firebaseapp.com",
-  projectId: "REPLACE_WITH_PROJECT_ID",
-  storageBucket: "REPLACE_WITH_PROJECT_ID.firebasestorage.app",
-  messagingSenderId: "REPLACE_WITH_SENDER_ID",
-  appId: "REPLACE_WITH_APP_ID",
+  apiKey: "AIzaSyBvbj-oO6aVaAM9g8VpulUqt7ycJhhr5Ck",
+  authDomain: "portfolio-tracker-c25ec.firebaseapp.com",
+  projectId: "portfolio-tracker-c25ec",
+  storageBucket: "portfolio-tracker-c25ec.firebasestorage.app",
+  messagingSenderId: "117903443864",
+  appId: "1:117903443864:web:a3ff07ab6d389d34f98ded",
 };
 
 const app = initializeApp(firebaseConfig);

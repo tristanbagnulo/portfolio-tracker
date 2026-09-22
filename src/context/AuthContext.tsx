@@ -21,9 +21,8 @@ function describeAuthError(err: unknown): string {
 
 // This project's OAuth Web client ID — from Firebase Console → Authentication →
 // Sign-in method → Google → "Web SDK configuration". Not a secret, same
-// public/embeddable status as the apiKey in lib/firebase.ts. PLACEHOLDER until the
-// real Firebase project exists.
-const GOOGLE_CLIENT_ID = "REPLACE_WITH_GOOGLE_OAUTH_CLIENT_ID.apps.googleusercontent.com";
+// public/embeddable status as the apiKey in lib/firebase.ts.
+const GOOGLE_CLIENT_ID = "117903443864-elg18dgre6a34domnpn0b3vr86ig6nv5.apps.googleusercontent.com";
 
 declare global {
   interface Window {
