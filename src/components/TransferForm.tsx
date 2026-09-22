@@ -96,7 +96,12 @@ export function TransferForm({
 
           <div className="form-field">
             <label>Amount ({fromHolding?.currency ?? "…"})</label>
-            <input type="number" step="any" value={draft.amount} onChange={(e) => set("amount", Number(e.target.value))} />
+            <input
+              type="number"
+              step="any"
+              value={draft.amount ? draft.amount : ""}
+              onChange={(e) => set("amount", Number(e.target.value))}
+            />
           </div>
           <div className="form-field">
             <label>Frequency</label>

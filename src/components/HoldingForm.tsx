@@ -57,6 +57,15 @@ function guessCoingeckoId(name: string): string | null {
   return COMMON_COINGECKO_IDS[name.trim().toLowerCase()] ?? null;
 }
 
+// A controlled number input showing a literal 0 isn't a placeholder — it's real text
+// sitting in the field, so typing "5" lands next to it ("05") instead of replacing it.
+// Showing an empty string instead lets typing start clean; the onChange handlers below
+// already turn an empty string back into 0 (Number("") === 0), so nothing round-trips
+// incorrectly when the field is left blank.
+function emptyIfZero(n: number | undefined): string | number {
+  return n ? n : "";
+}
+
 function blankHolding(baseCurrency: string): Draft {
   return {
     name: "",
@@ -223,7 +232,12 @@ export function HoldingForm({
             <>
               <div className="form-field">
                 <label>Current value</label>
-                <input type="number" step="any" value={draft.value} onChange={(e) => set("value", Number(e.target.value))} />
+                <input
+                  type="number"
+                  step="any"
+                  value={emptyIfZero(draft.value)}
+                  onChange={(e) => set("value", Number(e.target.value))}
+                />
               </div>
               <div className="form-field">
                 <label>Currency</label>
@@ -243,13 +257,18 @@ export function HoldingForm({
                 <input
                   type="number"
                   step="any"
-                  value={draft.quantity ?? 0}
+                  value={emptyIfZero(draft.quantity)}
                   onChange={(e) => set("quantity", Number(e.target.value))}
                 />
               </div>
               <div className="form-field">
                 <label>Price per unit</label>
-                <input type="number" step="any" value={draft.price ?? 0} onChange={(e) => set("price", Number(e.target.value))} />
+                <input
+                  type="number"
+                  step="any"
+                  value={emptyIfZero(draft.price)}
+                  onChange={(e) => set("price", Number(e.target.value))}
+                />
               </div>
               <div className="form-field span-2">
                 <label>Currency</label>
@@ -317,7 +336,7 @@ export function HoldingForm({
                 type="number"
                 step="any"
                 min={0}
-                value={Math.abs(c.amount)}
+                value={emptyIfZero(Math.abs(c.amount))}
                 onChange={(e) => {
                   const magnitude = Math.abs(Number(e.target.value));
                   updateContribution(c.id, { amount: isWithdraw ? -magnitude : magnitude });
