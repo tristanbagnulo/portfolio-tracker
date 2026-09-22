@@ -161,11 +161,32 @@ export function currentPortfolioValue(
   return { totalBase, byAssetClass, unconvertedCurrencies: Array.from(unconverted) };
 }
 
+/** What's actively contributing to the total THIS calendar month — a schedule that
+ * starts next month, or already ended, contributes 0 here even though it's part of
+ * the plan. This is what the projection engine uses internally, month by month. */
 export function monthlyContributionRate(holdings: Holding[], baseCurrency: string, fxRates: Record<string, number>): number {
   const now = startOfMonth(new Date());
   let total = 0;
   for (const h of holdings) {
     const nativeMonthly = monthlyContributionFor(h, now);
+    const converted = convert(nativeMonthly, h.currency, baseCurrency, fxRates);
+    if (converted != null) total += converted;
+  }
+  return total;
+}
+
+/** The full monthly rate you've committed to across every recurring schedule,
+ * regardless of whether it's started yet or already ended — "once" (one-off)
+ * schedules aren't a rate and are excluded. This is the "at a glance" number for
+ * a stat tile; the projection itself still gates each schedule by its real dates. */
+export function plannedMonthlyContribution(
+  holdings: Holding[],
+  baseCurrency: string,
+  fxRates: Record<string, number>,
+): number {
+  let total = 0;
+  for (const h of holdings) {
+    const nativeMonthly = h.contributions.reduce((sum, c) => sum + monthlyEquivalent(c), 0);
     const converted = convert(nativeMonthly, h.currency, baseCurrency, fxRates);
     if (converted != null) total += converted;
   }

@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { usePortfolio } from "./context/PortfolioContext";
 import { Holding, Scenario } from "./types";
-import { currentPortfolioValue, monthlyContributionRate } from "./lib/projection";
+import { currentPortfolioValue, plannedMonthlyContribution } from "./lib/projection";
 import { StatTiles } from "./components/StatTiles";
 import { AllocationChart } from "./components/AllocationChart";
 import { HoldingsTable } from "./components/HoldingsTable";
@@ -33,7 +33,7 @@ export default function App() {
 
   const current = useMemo(() => currentPortfolioValue(state.holdings, baseCurrency, fxRates), [state.holdings, baseCurrency, fxRates]);
   const monthlyRate = useMemo(
-    () => monthlyContributionRate(state.holdings, baseCurrency, fxRates),
+    () => plannedMonthlyContribution(state.holdings, baseCurrency, fxRates),
     [state.holdings, baseCurrency, fxRates],
   );
 

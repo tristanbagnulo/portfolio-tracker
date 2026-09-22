@@ -23,7 +23,7 @@ export function StatTiles({
       <div className="stat-tile">
         <div className="label">Contributing (monthly rate)</div>
         <div className="value">{formatMoney(monthlyContribution, baseCurrency)}</div>
-        <div className="hint">normalized across all schedules</div>
+        <div className="hint">everything you've scheduled, even if it hasn't started yet</div>
       </div>
     </div>
   );
