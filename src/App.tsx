@@ -9,13 +9,15 @@ import { HoldingForm } from "./components/HoldingForm";
 import { SettingsBar } from "./components/SettingsBar";
 import { ProjectionsPanel } from "./components/ProjectionsPanel";
 import { HistoryPanel } from "./components/HistoryPanel";
+import { FxRateModal } from "./components/FxRateModal";
 import { formatDate } from "./lib/format";
 
 type Tab = "holdings" | "projections" | "history";
 
 export default function App() {
-  const { state, addHolding, updateHolding, deleteHolding, updateSettings, refreshAll } = usePortfolio();
+  const { state, saveHolding, deleteHolding, updateSettings, refreshAll } = usePortfolio();
   const [modalHolding, setModalHolding] = useState<Holding | "new" | null>(null);
+  const [editingFxCurrency, setEditingFxCurrency] = useState<string | null>(null);
   const [tab, setTab] = useState<Tab>("holdings");
 
   const { baseCurrency, fxRates } = state.settings;
@@ -38,11 +40,9 @@ export default function App() {
   const staleHoldings = state.holdings.filter((h) => (Date.now() - new Date(h.valueUpdatedAt).getTime()) / 86400000 > 30);
 
   function handleSave(holding: Omit<Holding, "id"> | Holding) {
-    if ("id" in holding) {
-      updateHolding(holding.id, holding);
-    } else {
-      addHolding(holding);
-    }
+    // saveHolding also tries to fetch a live price/rate for it immediately,
+    // rather than waiting for the next 5-minute tick.
+    saveHolding(holding);
     setModalHolding(null);
   }
 
@@ -85,7 +85,11 @@ export default function App() {
           {current.unconvertedCurrencies.length > 0 && (
             <div className="banner">
               No exchange rate yet for {current.unconvertedCurrencies.join(", ")} → {baseCurrency}. Those holdings are left
-              out of the total until "Refresh now" succeeds or you're online.
+              out of the total until a live refresh succeeds, or you{" "}
+              <button className="link-btn" onClick={() => setEditingFxCurrency(current.unconvertedCurrencies[0])}>
+                set one manually
+              </button>
+              .
             </div>
           )}
           {staleHoldings.length > 0 && (
@@ -110,6 +114,32 @@ export default function App() {
             <h2>Allocation</h2>
             <AllocationChart byAssetClass={current.byAssetClass} total={current.totalBase} baseCurrency={baseCurrency} />
           </div>
+
+          {(() => {
+            const needed = Array.from(new Set(state.holdings.map((h) => h.currency).filter((c) => c !== baseCurrency)));
+            if (!needed.length) return null;
+            return (
+              <div className="card">
+                <div className="toolbar" style={{ justifyContent: "space-between", marginBottom: 4 }}>
+                  <h2 style={{ margin: 0 }}>Exchange rates</h2>
+                  <span className="help">to {baseCurrency}</span>
+                </div>
+                {needed.map((c) => (
+                  <div
+                    key={c}
+                    className="fx-row"
+                    style={{ display: "flex", justifyContent: "space-between", padding: "8px 0", borderBottom: "1px solid var(--gridline)", cursor: "pointer" }}
+                    onClick={() => setEditingFxCurrency(c)}
+                  >
+                    <span style={{ color: "var(--text-secondary)" }}>
+                      {c} → {baseCurrency}
+                    </span>
+                    <span>{fxRates[c] != null ? `1 ${c} = ${fxRates[c]} ${baseCurrency}` : "not set"}</span>
+                  </div>
+                ))}
+              </div>
+            );
+          })()}
 
           <div className="card">
             <h2>Holdings</h2>
@@ -138,6 +168,23 @@ export default function App() {
           onSave={handleSave}
           onDelete={modalHolding !== "new" ? handleDeleteFromForm : undefined}
           onClose={() => setModalHolding(null)}
+        />
+      )}
+
+      {editingFxCurrency && (
+        <FxRateModal
+          currency={editingFxCurrency}
+          baseCurrency={baseCurrency}
+          currentRate={fxRates[editingFxCurrency]}
+          holdings={state.holdings}
+          onSave={(rate) => {
+            updateSettings({
+              fxRates: { ...fxRates, [editingFxCurrency]: rate },
+              fxRatesUpdatedAt: new Date().toISOString(),
+            });
+            setEditingFxCurrency(null);
+          }}
+          onClose={() => setEditingFxCurrency(null)}
         />
       )}
 

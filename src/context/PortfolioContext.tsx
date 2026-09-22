@@ -11,6 +11,7 @@ interface PortfolioContextValue {
   state: PortfolioState;
   addHolding: (holding: Omit<Holding, "id">) => void;
   updateHolding: (id: string, patch: Partial<Holding>) => void;
+  saveHolding: (holding: Omit<Holding, "id"> | Holding) => void;
   deleteHolding: (id: string) => void;
   updateSettings: (patch: Partial<PortfolioSettings>) => void;
   refreshAll: () => Promise<void>;
@@ -58,17 +59,22 @@ export function PortfolioProvider({ children }: { children: React.ReactNode }) {
     setState((s) => ({ ...s, settings: { ...s.settings, ...patch } }));
   }, []);
 
-  // Fetches live crypto/equity prices and FX rates together, since a price refresh
-  // can introduce a new currency that then also needs a rate. Silent on auto-refresh
-  // ticks — errors surface via fxStatus/fxError for the manual "Refresh" button to show.
-  const refreshAll = useCallback(async () => {
+  // Fetches live crypto/equity prices and FX rates for exactly the holdings/base
+  // currency passed in, then merges results into state. Pulled out from refreshAll
+  // so a just-added holding can be refreshed immediately using the array the caller
+  // already knows is current, rather than the possibly-stale state snapshot React
+  // hasn't re-rendered with yet.
+  const performRefresh = useCallback(async (holdings: Holding[], baseCurrency: string) => {
     setPriceStatus("loading");
-    let holdingsAfterPrices = stateRef.current.holdings;
+    let holdingsAfterPrices = holdings;
     try {
-      const { holdings, result } = await refreshLivePrices(stateRef.current.holdings);
-      holdingsAfterPrices = holdings;
+      const { holdings: updated, result } = await refreshLivePrices(holdings);
+      holdingsAfterPrices = updated;
       setLastPriceResult(result);
-      setState((s) => ({ ...s, holdings }));
+      setState((s) => ({
+        ...s,
+        holdings: s.holdings.map((h) => updated.find((u) => u.id === h.id) ?? h),
+      }));
     } finally {
       setPriceStatus("idle");
     }
@@ -77,10 +83,10 @@ export function PortfolioProvider({ children }: { children: React.ReactNode }) {
     setFxError(null);
     try {
       const currencies = Array.from(new Set(holdingsAfterPrices.map((h) => h.currency)));
-      const rates = await fetchFxRates(stateRef.current.settings.baseCurrency, currencies);
+      const rates = await fetchFxRates(baseCurrency, currencies);
       setState((s) => ({
         ...s,
-        settings: { ...s.settings, fxRates: rates, fxRatesUpdatedAt: new Date().toISOString() },
+        settings: { ...s.settings, fxRates: { ...s.settings.fxRates, ...rates }, fxRatesUpdatedAt: new Date().toISOString() },
       }));
       setFxStatus("idle");
     } catch (err) {
@@ -89,6 +95,26 @@ export function PortfolioProvider({ children }: { children: React.ReactNode }) {
     }
     setLastRefreshedAt(new Date().toISOString());
   }, []);
+
+  // Manual/periodic refresh of everything currently held, reading the latest state
+  // via ref since there's no racing state update to worry about here.
+  const refreshAll = useCallback(async () => {
+    await performRefresh(stateRef.current.holdings, stateRef.current.settings.baseCurrency);
+  }, [performRefresh]);
+
+  // Add or update a holding and immediately try to fetch a live price/rate for it,
+  // computed from the current render's state rather than a ref, so it's never stale.
+  const saveHolding = useCallback(
+    (holding: Omit<Holding, "id"> | Holding) => {
+      const withId: Holding = "id" in holding ? holding : { ...holding, id: newId() };
+      const nextHoldings = "id" in holding
+        ? state.holdings.map((h) => (h.id === withId.id ? withId : h))
+        : [...state.holdings, withId];
+      setState((s) => ({ ...s, holdings: nextHoldings }));
+      performRefresh(nextHoldings, state.settings.baseCurrency);
+    },
+    [state.holdings, state.settings.baseCurrency, performRefresh],
+  );
 
   // Auto-refresh every 5 minutes while the tab is open and the setting is on.
   // Pauses when the page isn't visible so a backgrounded tab doesn't keep hammering
@@ -113,6 +139,7 @@ export function PortfolioProvider({ children }: { children: React.ReactNode }) {
       state,
       addHolding,
       updateHolding,
+      saveHolding,
       deleteHolding,
       updateSettings,
       refreshAll,
@@ -128,6 +155,7 @@ export function PortfolioProvider({ children }: { children: React.ReactNode }) {
       state,
       addHolding,
       updateHolding,
+      saveHolding,
       deleteHolding,
       updateSettings,
       refreshAll,

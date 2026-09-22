@@ -20,6 +20,43 @@ function defaultModeForClass(cls: AssetClass): EntryMode {
   return cls === "cash_savings" || cls === "other" ? "value" : "quantity";
 }
 
+// Common coin names -> their CoinGecko id, so typing a well-known name auto-fills
+// the live lookup symbol instead of leaving it as a blank field nobody knows to fill in.
+const COMMON_COINGECKO_IDS: Record<string, string> = {
+  bitcoin: "bitcoin",
+  btc: "bitcoin",
+  ethereum: "ethereum",
+  eth: "ethereum",
+  solana: "solana",
+  sol: "solana",
+  cardano: "cardano",
+  ada: "cardano",
+  dogecoin: "dogecoin",
+  doge: "dogecoin",
+  litecoin: "litecoin",
+  ltc: "litecoin",
+  ripple: "ripple",
+  xrp: "ripple",
+  polkadot: "polkadot",
+  dot: "polkadot",
+  avalanche: "avalanche-2",
+  avax: "avalanche-2",
+  chainlink: "chainlink",
+  link: "chainlink",
+  polygon: "matic-network",
+  matic: "matic-network",
+  "usd coin": "usd-coin",
+  usdc: "usd-coin",
+  tether: "tether",
+  usdt: "tether",
+  "binance coin": "binancecoin",
+  bnb: "binancecoin",
+};
+
+function guessCoingeckoId(name: string): string | null {
+  return COMMON_COINGECKO_IDS[name.trim().toLowerCase()] ?? null;
+}
+
 function blankHolding(baseCurrency: string): Draft {
   return {
     name: "",
@@ -58,8 +95,25 @@ export function HoldingForm({
     setDraft((d) => ({ ...d, [key]: value }));
   }
 
+  // Auto-fills the live lookup symbol for a recognizable coin name once the holding
+  // is (or becomes) crypto, but never overwrites one the user already typed themselves.
+  // Name and asset class can be set in either order, so both setters check it.
+  function suggestSymbol(name: string, cls: AssetClass, existing: string | undefined): string | undefined {
+    if (cls !== "crypto" || existing) return existing;
+    return guessCoingeckoId(name) ?? existing;
+  }
+
+  function setName(name: string) {
+    setDraft((d) => ({ ...d, name, lookupSymbol: suggestSymbol(name, d.assetClass, d.lookupSymbol) }));
+  }
+
   function setAssetClass(cls: AssetClass) {
-    setDraft((d) => ({ ...d, assetClass: cls, entryMode: initial ? d.entryMode : defaultModeForClass(cls) }));
+    setDraft((d) => ({
+      ...d,
+      assetClass: cls,
+      entryMode: initial ? d.entryMode : defaultModeForClass(cls),
+      lookupSymbol: suggestSymbol(d.name, cls, d.lookupSymbol),
+    }));
   }
 
   function setEntryMode(mode: EntryMode) {
@@ -124,7 +178,7 @@ export function HoldingForm({
             <input
               required
               value={draft.name}
-              onChange={(e) => set("name", e.target.value)}
+              onChange={(e) => setName(e.target.value)}
               placeholder="e.g. Bitcoin, VAS, ING Savings Maximiser"
             />
           </div>
@@ -158,6 +212,11 @@ export function HoldingForm({
                 By quantity
               </button>
             </div>
+            <span className="help">
+              {draft.entryMode === "value"
+                ? "You type the current value yourself — simplest, but there's nothing to auto-lookup since no unit price is involved."
+                : "For crypto with a recognized name, the live price fills in automatically after saving — you only need the quantity."}
+            </span>
           </div>
 
           {draft.entryMode === "value" ? (
