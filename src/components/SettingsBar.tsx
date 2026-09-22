@@ -1,20 +1,23 @@
-import { useRef, useState } from "react";
+import { useRef } from "react";
 import { CURRENCIES } from "../types";
 import { usePortfolio } from "../context/PortfolioContext";
 import { formatDate } from "../lib/format";
-import { PriceRefreshResult } from "../lib/prices";
 
 export function SettingsBar() {
-  const { state, updateSettings, refreshFx, refreshPrices, fxStatus, fxError, priceStatus, exportData, importData } =
-    usePortfolio();
+  const {
+    state,
+    updateSettings,
+    refreshAll,
+    fxStatus,
+    fxError,
+    priceStatus,
+    lastRefreshedAt,
+    lastPriceResult,
+    exportData,
+    importData,
+  } = usePortfolio();
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const [lastPriceResult, setLastPriceResult] = useState<PriceRefreshResult | null>(null);
-
-  async function handleRefreshPrices() {
-    const result = await refreshPrices();
-    setLastPriceResult(result);
-    await refreshFx();
-  }
+  const refreshing = priceStatus === "loading" || fxStatus === "loading";
 
   function handleImportClick() {
     fileInputRef.current?.click();
@@ -49,9 +52,17 @@ export function SettingsBar() {
               ))}
             </select>
           </div>
-          <button onClick={handleRefreshPrices} disabled={priceStatus === "loading" || fxStatus === "loading"}>
-            {priceStatus === "loading" || fxStatus === "loading" ? "Refreshing…" : "Refresh prices & FX"}
+          <button onClick={() => refreshAll()} disabled={refreshing}>
+            {refreshing ? "Refreshing…" : "Refresh now"}
           </button>
+          <label style={{ display: "flex", alignItems: "center", gap: 5, fontSize: 13 }}>
+            <input
+              type="checkbox"
+              checked={state.settings.autoRefresh}
+              onChange={(e) => updateSettings({ autoRefresh: e.target.checked })}
+            />
+            Auto-refresh every 5 min
+          </label>
         </div>
         <div className="toolbar">
           <button onClick={exportData}>Export backup</button>
@@ -60,7 +71,7 @@ export function SettingsBar() {
         </div>
       </div>
       <div style={{ fontSize: 11, color: "var(--text-muted)", marginTop: 8 }}>
-        {state.settings.fxRatesUpdatedAt ? `FX rates as of ${formatDate(state.settings.fxRatesUpdatedAt)}.` : "FX rates not fetched yet."}{" "}
+        {lastRefreshedAt ? `Last refreshed ${formatDate(lastRefreshedAt)}.` : "Not refreshed yet — crypto prices and FX rates are fetched live; equities are best-effort."}{" "}
         {fxError && <span style={{ color: "var(--critical)" }}>FX refresh failed: {fxError}</span>}
       </div>
       {lastPriceResult && lastPriceResult.failed.length > 0 && (

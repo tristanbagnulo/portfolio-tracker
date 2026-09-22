@@ -22,16 +22,19 @@ export async function fetchFxRates(
   return result;
 }
 
+/** Returns null when either currency has no known rate — callers must treat that as
+ * "can't convert this yet" (exclude from totals, flag it), never silently pass the
+ * raw amount through as if it were already in `toCurrency`. */
 export function convert(
   amount: number,
   fromCurrency: string,
   toCurrency: string,
   rates: Record<string, number>,
-): number {
+): number | null {
   if (fromCurrency === toCurrency) return amount;
   const fromRate = rates[fromCurrency];
   const toRate = rates[toCurrency];
-  if (fromRate == null || toRate == null) return amount; // unknown pair — caller should flag this
+  if (fromRate == null || toRate == null) return null;
   // rates[code] = value of 1 unit of `code` in the settings.baseCurrency at fetch time.
   return (amount * fromRate) / toRate;
 }

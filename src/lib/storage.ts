@@ -1,19 +1,22 @@
-import { DEFAULT_STATE, PortfolioState } from "../types";
+import { defaultState, PortfolioState } from "../types";
 
-const STORAGE_KEY = "portfolio-tracker:state:v1";
+const STORAGE_KEY = "portfolio-tracker:state:v2";
 
 export function loadState(): PortfolioState {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
-    if (!raw) return structuredClone(DEFAULT_STATE);
+    if (!raw) return defaultState();
     const parsed = JSON.parse(raw) as PortfolioState;
+    const d = defaultState();
+    const settings = { ...d.settings, ...parsed.settings };
+    if (!settings.scenarios?.length) settings.scenarios = d.settings.scenarios;
+    if (!settings.visibleScenarioIds?.length) settings.visibleScenarioIds = settings.scenarios.map((s) => s.id);
     return {
-      ...structuredClone(DEFAULT_STATE),
-      ...parsed,
-      settings: { ...structuredClone(DEFAULT_STATE.settings), ...parsed.settings },
+      holdings: Array.isArray(parsed.holdings) ? parsed.holdings : [],
+      settings,
     };
   } catch {
-    return structuredClone(DEFAULT_STATE);
+    return defaultState();
   }
 }
 
@@ -36,6 +39,11 @@ export function parseImportedState(text: string): PortfolioState {
   const parsed = JSON.parse(text) as PortfolioState;
   if (!Array.isArray(parsed.holdings) || typeof parsed.settings !== "object") {
     throw new Error("File doesn't look like a portfolio-tracker backup.");
+  }
+  const d = defaultState();
+  if (!parsed.settings.scenarios?.length) {
+    parsed.settings.scenarios = d.settings.scenarios;
+    parsed.settings.visibleScenarioIds = d.settings.visibleScenarioIds;
   }
   return parsed;
 }

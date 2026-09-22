@@ -62,7 +62,7 @@ export async function refreshLivePrices(
   const result: PriceRefreshResult = { updated: [], skipped: [], failed: [] };
   const now = new Date().toISOString();
 
-  const cryptoHoldings = holdings.filter((h) => h.assetClass === "crypto" && h.lookupSymbol);
+  const cryptoHoldings = holdings.filter((h) => h.entryMode === "quantity" && h.assetClass === "crypto" && h.lookupSymbol);
   const cryptoByVsCurrency = new Map<string, Holding[]>();
   for (const h of cryptoHoldings) {
     const vs = h.currency.toLowerCase();
@@ -91,7 +91,7 @@ export async function refreshLivePrices(
   }
 
   const equityHoldings = holdings.filter(
-    (h) => (h.assetClass === "equity" || h.assetClass === "other") && h.lookupSymbol,
+    (h) => h.entryMode === "quantity" && (h.assetClass === "equity" || h.assetClass === "other") && h.lookupSymbol,
   );
   for (const h of equityHoldings) {
     const quote = await fetchEquityPrice(h.lookupSymbol!);
@@ -117,7 +117,8 @@ export async function refreshLivePrices(
     const price = priceById.get(h.id);
     if (price == null) return h;
     result.updated.push(h.id);
-    return { ...h, price, priceSource: "live" as const, priceUpdatedAt: now };
+    const quantity = h.quantity ?? 0;
+    return { ...h, price, quantity, value: quantity * price, priceSource: "live" as const, valueUpdatedAt: now };
   });
 
   return { holdings: nextHoldings, result };

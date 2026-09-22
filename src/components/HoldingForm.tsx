@@ -5,25 +5,33 @@ import {
   CURRENCIES,
   ContributionFrequency,
   ContributionSchedule,
-  DEFAULT_GROWTH_PCT,
+  EntryMode,
   FREQUENCY_LABELS,
   Holding,
 } from "../types";
 import { newId } from "../lib/id";
+import { convert } from "../lib/fx";
+import { formatMoney } from "../lib/format";
 
 type DraftContribution = ContributionSchedule;
+type Draft = Omit<Holding, "id"> | Holding;
 
-function blankHolding(): Omit<Holding, "id"> {
+function defaultModeForClass(cls: AssetClass): EntryMode {
+  return cls === "cash_savings" || cls === "other" ? "value" : "quantity";
+}
+
+function blankHolding(baseCurrency: string): Draft {
   return {
     name: "",
     assetClass: "equity",
-    currency: "AUD",
+    currency: baseCurrency,
+    entryMode: "quantity",
     lookupSymbol: "",
     quantity: 0,
     price: 0,
     priceSource: "manual",
-    priceUpdatedAt: new Date().toISOString(),
-    assumedAnnualGrowthPct: DEFAULT_GROWTH_PCT.equity,
+    value: 0,
+    valueUpdatedAt: new Date().toISOString(),
     contributions: [],
     notes: "",
   };
@@ -31,27 +39,31 @@ function blankHolding(): Omit<Holding, "id"> {
 
 export function HoldingForm({
   initial,
+  baseCurrency,
+  fxRates,
   onSave,
+  onDelete,
   onClose,
 }: {
   initial: Holding | null;
-  onSave: (holding: Omit<Holding, "id"> | Holding) => void;
+  baseCurrency: string;
+  fxRates: Record<string, number>;
+  onSave: (holding: Draft) => void;
+  onDelete?: () => void;
   onClose: () => void;
 }) {
-  const [draft, setDraft] = useState<Omit<Holding, "id"> | Holding>(() => initial ?? blankHolding());
+  const [draft, setDraft] = useState<Draft>(() => initial ?? blankHolding(baseCurrency));
 
   function set<K extends keyof Holding>(key: K, value: Holding[K]) {
     setDraft((d) => ({ ...d, [key]: value }));
   }
 
   function setAssetClass(cls: AssetClass) {
-    setDraft((d) => ({
-      ...d,
-      assetClass: cls,
-      // Only nudge the default growth rate if the user hasn't customized it yet
-      assumedAnnualGrowthPct:
-        d.assumedAnnualGrowthPct === DEFAULT_GROWTH_PCT[d.assetClass] ? DEFAULT_GROWTH_PCT[cls] : d.assumedAnnualGrowthPct,
-    }));
+    setDraft((d) => ({ ...d, assetClass: cls, entryMode: initial ? d.entryMode : defaultModeForClass(cls) }));
+  }
+
+  function setEntryMode(mode: EntryMode) {
+    setDraft((d) => ({ ...d, entryMode: mode }));
   }
 
   function addContribution() {
@@ -75,12 +87,30 @@ export function HoldingForm({
     setDraft((d) => ({ ...d, contributions: d.contributions.filter((c) => c.id !== id) }));
   }
 
-  const canFetchLive = draft.assetClass === "crypto" || draft.assetClass === "equity" || draft.assetClass === "other";
+  const canFetchLive =
+    draft.entryMode === "quantity" &&
+    (draft.assetClass === "crypto" || draft.assetClass === "equity" || draft.assetClass === "other");
+
+  const quantityValuePreview =
+    draft.entryMode === "quantity" && draft.quantity && draft.price
+      ? formatMoney(draft.quantity * draft.price, draft.currency)
+      : null;
+
+  const convertedPreview =
+    draft.currency !== baseCurrency
+      ? convert(draft.entryMode === "value" ? draft.value : (draft.quantity ?? 0) * (draft.price ?? 0), draft.currency, baseCurrency, fxRates)
+      : null;
 
   function submit(e: React.FormEvent) {
     e.preventDefault();
     if (!draft.name.trim()) return;
-    onSave(draft);
+    const value = draft.entryMode === "value" ? draft.value : (draft.quantity ?? 0) * (draft.price ?? 0);
+    const valueChanged = !initial || initial.value !== value;
+    onSave({
+      ...draft,
+      value,
+      valueUpdatedAt: valueChanged ? new Date().toISOString() : draft.valueUpdatedAt,
+    });
   }
 
   return (
@@ -90,7 +120,7 @@ export function HoldingForm({
 
         <div className="form-grid">
           <div className="form-field span-2">
-            <label>Name</label>
+            <label>Asset</label>
             <input
               required
               value={draft.name}
@@ -99,7 +129,7 @@ export function HoldingForm({
             />
           </div>
 
-          <div className="form-field">
+          <div className="form-field span-2">
             <label>Asset class</label>
             <select value={draft.assetClass} onChange={(e) => setAssetClass(e.target.value as AssetClass)}>
               {(Object.keys(ASSET_CLASS_LABELS) as AssetClass[]).map((cls) => (
@@ -110,33 +140,82 @@ export function HoldingForm({
             </select>
           </div>
 
-          <div className="form-field">
-            <label>Native currency</label>
-            <select value={draft.currency} onChange={(e) => set("currency", e.target.value)}>
-              {CURRENCIES.map((c) => (
-                <option key={c.code} value={c.code}>
-                  {c.code} — {c.name}
-                </option>
-              ))}
-            </select>
+          <div className="form-field span-2">
+            <label>How do you want to enter it?</label>
+            <div className="seg-toggle">
+              <button
+                type="button"
+                className={draft.entryMode === "value" ? "active" : ""}
+                onClick={() => setEntryMode("value")}
+              >
+                By value
+              </button>
+              <button
+                type="button"
+                className={draft.entryMode === "quantity" ? "active" : ""}
+                onClick={() => setEntryMode("quantity")}
+              >
+                By quantity
+              </button>
+            </div>
           </div>
 
-          <div className="form-field">
-            <label>Quantity {draft.assetClass === "cash_savings" && "(use 1)"}</label>
-            <input
-              type="number"
-              step="any"
-              value={draft.quantity}
-              onChange={(e) => set("quantity", Number(e.target.value))}
-            />
-          </div>
+          {draft.entryMode === "value" ? (
+            <>
+              <div className="form-field">
+                <label>Current value</label>
+                <input type="number" step="any" value={draft.value} onChange={(e) => set("value", Number(e.target.value))} />
+              </div>
+              <div className="form-field">
+                <label>Currency</label>
+                <select value={draft.currency} onChange={(e) => set("currency", e.target.value)}>
+                  {CURRENCIES.map((c) => (
+                    <option key={c.code} value={c.code}>
+                      {c.code}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </>
+          ) : (
+            <>
+              <div className="form-field">
+                <label>Quantity</label>
+                <input
+                  type="number"
+                  step="any"
+                  value={draft.quantity ?? 0}
+                  onChange={(e) => set("quantity", Number(e.target.value))}
+                />
+              </div>
+              <div className="form-field">
+                <label>Price per unit</label>
+                <input type="number" step="any" value={draft.price ?? 0} onChange={(e) => set("price", Number(e.target.value))} />
+              </div>
+              <div className="form-field span-2">
+                <label>Currency</label>
+                <select value={draft.currency} onChange={(e) => set("currency", e.target.value)}>
+                  {CURRENCIES.map((c) => (
+                    <option key={c.code} value={c.code}>
+                      {c.code}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              {quantityValuePreview && <div className="form-field span-2 help">= {quantityValuePreview}</div>}
+            </>
+          )}
 
-          <div className="form-field">
-            <label>
-              {draft.assetClass === "cash_savings" ? "Balance" : "Price per unit"} ({draft.currency})
-            </label>
-            <input type="number" step="any" value={draft.price} onChange={(e) => set("price", Number(e.target.value))} />
-          </div>
+          {convertedPreview != null && (
+            <div className="form-field span-2 help">
+              ≈ {formatMoney(convertedPreview, baseCurrency)}
+            </div>
+          )}
+          {draft.currency !== baseCurrency && convertedPreview == null && (
+            <div className="form-field span-2 help">
+              No exchange rate set for {draft.currency} yet — one will be fetched automatically, or add one manually.
+            </div>
+          )}
 
           {canFetchLive && (
             <div className="form-field span-2">
@@ -148,26 +227,16 @@ export function HoldingForm({
               />
               <span className="help">
                 {draft.assetClass === "crypto"
-                  ? "Reliable — fetched from CoinGecko's free public API."
-                  : "Best-effort — an unauthenticated lookup that can fail; price will stay manual if it does."}
+                  ? "Reliable — fetched from CoinGecko's free public API, refreshed automatically."
+                  : "Best-effort — an unauthenticated lookup that can fail; value will stay manual if it does."}
               </span>
             </div>
           )}
-          {draft.assetClass === "precious_metal" && (
+          {draft.entryMode === "quantity" && draft.assetClass === "precious_metal" && (
             <div className="form-field span-2 help">
               No free live metals price source yet — update this price manually as it moves.
             </div>
           )}
-
-          <div className="form-field">
-            <label>{draft.assetClass === "cash_savings" ? "Interest rate (APY %)" : "Assumed annual growth (%)"}</label>
-            <input
-              type="number"
-              step="any"
-              value={draft.assumedAnnualGrowthPct}
-              onChange={(e) => set("assumedAnnualGrowthPct", Number(e.target.value))}
-            />
-          </div>
 
           <div className="form-field span-2">
             <label>Notes (optional)</label>
@@ -175,9 +244,9 @@ export function HoldingForm({
           </div>
         </div>
 
-        <h2 style={{ fontSize: 14, marginTop: 20 }}>Contribution schedule</h2>
+        <h2 style={{ fontSize: 14, marginTop: 20 }}>Contributions</h2>
         <p className="help" style={{ marginTop: -6, marginBottom: 10 }}>
-          How much, how often, and from when you add to this holding. Add as many rows as you like.
+          How much, how often, and from when you plan to keep adding to this. Add as many rows as you like.
         </p>
         {draft.contributions.map((c) => (
           <div className="contribution-row" key={c.id}>
@@ -230,6 +299,11 @@ export function HoldingForm({
         </button>
 
         <div className="modal-actions">
+          {onDelete && (
+            <button type="button" className="danger" onClick={onDelete} style={{ marginRight: "auto" }}>
+              Delete holding
+            </button>
+          )}
           <button type="button" onClick={onClose}>
             Cancel
           </button>
