@@ -1,5 +1,5 @@
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
-import { Holding, PortfolioSettings, PortfolioState } from "../types";
+import { Holding, PortfolioSettings, PortfolioState, Transfer } from "../types";
 import { loadState, saveState, exportStateAsFile, parseImportedState } from "../lib/storage";
 import { fetchFxRates } from "../lib/fx";
 import { refreshLivePrices, PriceRefreshResult } from "../lib/prices";
@@ -13,6 +13,8 @@ interface PortfolioContextValue {
   updateHolding: (id: string, patch: Partial<Holding>) => void;
   saveHolding: (holding: Omit<Holding, "id"> | Holding) => void;
   deleteHolding: (id: string) => void;
+  saveTransfer: (transfer: Omit<Transfer, "id"> | Transfer) => void;
+  deleteTransfer: (id: string) => void;
   updateSettings: (patch: Partial<PortfolioSettings>) => void;
   refreshAll: () => Promise<void>;
   fxStatus: "idle" | "loading" | "error";
@@ -52,7 +54,25 @@ export function PortfolioProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const deleteHolding = useCallback((id: string) => {
-    setState((s) => ({ ...s, holdings: s.holdings.filter((h) => h.id !== id) }));
+    setState((s) => ({
+      ...s,
+      holdings: s.holdings.filter((h) => h.id !== id),
+      // A transfer referencing a deleted holding on either end can't mean anything.
+      transfers: s.transfers.filter((t) => t.fromHoldingId !== id && t.toHoldingId !== id),
+    }));
+  }, []);
+
+  const saveTransfer = useCallback((transfer: Omit<Transfer, "id"> | Transfer) => {
+    setState((s) => {
+      if ("id" in transfer) {
+        return { ...s, transfers: s.transfers.map((t) => (t.id === transfer.id ? transfer : t)) };
+      }
+      return { ...s, transfers: [...s.transfers, { ...transfer, id: newId() }] };
+    });
+  }, []);
+
+  const deleteTransfer = useCallback((id: string) => {
+    setState((s) => ({ ...s, transfers: s.transfers.filter((t) => t.id !== id) }));
   }, []);
 
   const updateSettings = useCallback((patch: Partial<PortfolioSettings>) => {
@@ -141,6 +161,8 @@ export function PortfolioProvider({ children }: { children: React.ReactNode }) {
       updateHolding,
       saveHolding,
       deleteHolding,
+      saveTransfer,
+      deleteTransfer,
       updateSettings,
       refreshAll,
       fxStatus,
@@ -157,6 +179,8 @@ export function PortfolioProvider({ children }: { children: React.ReactNode }) {
       updateHolding,
       saveHolding,
       deleteHolding,
+      saveTransfer,
+      deleteTransfer,
       updateSettings,
       refreshAll,
       fxStatus,

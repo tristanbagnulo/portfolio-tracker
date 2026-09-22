@@ -13,6 +13,7 @@ export function loadState(): PortfolioState {
     if (!settings.visibleScenarioIds?.length) settings.visibleScenarioIds = settings.scenarios.map((s) => s.id);
     return {
       holdings: Array.isArray(parsed.holdings) ? parsed.holdings : [],
+      transfers: Array.isArray(parsed.transfers) ? parsed.transfers : [],
       settings,
     };
   } catch {
@@ -45,5 +46,6 @@ export function parseImportedState(text: string): PortfolioState {
     parsed.settings.scenarios = d.settings.scenarios;
     parsed.settings.visibleScenarioIds = d.settings.visibleScenarioIds;
   }
+  if (!Array.isArray(parsed.transfers)) parsed.transfers = [];
   return parsed;
 }

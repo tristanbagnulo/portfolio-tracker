@@ -307,16 +307,41 @@ export function HoldingForm({
         <p className="help" style={{ marginTop: -6, marginBottom: 10 }}>
           How much, how often, and from when you plan to keep adding to this. Add as many rows as you like.
         </p>
-        {draft.contributions.map((c) => (
+        {draft.contributions.map((c) => {
+          const isWithdraw = c.amount < 0;
+          return (
           <div className="contribution-row" key={c.id}>
             <div className="form-field">
               <label>Amount ({draft.currency})</label>
               <input
                 type="number"
                 step="any"
-                value={c.amount}
-                onChange={(e) => updateContribution(c.id, { amount: Number(e.target.value) })}
+                min={0}
+                value={Math.abs(c.amount)}
+                onChange={(e) => {
+                  const magnitude = Math.abs(Number(e.target.value));
+                  updateContribution(c.id, { amount: isWithdraw ? -magnitude : magnitude });
+                }}
               />
+            </div>
+            <div className="form-field">
+              <label>Direction</label>
+              <div className="seg-toggle">
+                <button
+                  type="button"
+                  className={!isWithdraw ? "active" : ""}
+                  onClick={() => updateContribution(c.id, { amount: Math.abs(c.amount) })}
+                >
+                  Add
+                </button>
+                <button
+                  type="button"
+                  className={isWithdraw ? "active" : ""}
+                  onClick={() => updateContribution(c.id, { amount: -Math.abs(c.amount) })}
+                >
+                  Withdraw
+                </button>
+              </div>
             </div>
             <div className="form-field">
               <label>Frequency</label>
@@ -352,7 +377,8 @@ export function HoldingForm({
               Remove
             </button>
           </div>
-        ))}
+          );
+        })}
         <button type="button" onClick={addContribution}>
           + Add contribution
         </button>

@@ -91,6 +91,25 @@ export interface Scenario {
   rates: Record<AssetClass, number>;
 }
 
+/** A recurring (or one-off) movement of money from one of your holdings to another —
+ * e.g. routinely moving USD from a SoFi savings holding into a Bitcoin holding. This is
+ * NOT a contribution: it's a reallocation between assets you already track, so it never
+ * changes your total net worth by itself and is never counted in a "money added" stat —
+ * only the projection applies it, shrinking the source and growing the destination each
+ * month it's active. `amount` is denominated in the source holding's currency; it's
+ * converted to the destination's currency at the same held-constant FX snapshot the rest
+ * of the projection uses. */
+export interface Transfer {
+  id: string;
+  name?: string; // optional label, e.g. "DCA into Bitcoin"
+  fromHoldingId: string;
+  toHoldingId: string;
+  amount: number;
+  frequency: ContributionFrequency;
+  startDate: string;
+  endDate?: string;
+}
+
 export interface PortfolioSettings {
   baseCurrency: string;
   fxRates: Record<string, number>; // 1 unit of key currency -> base currency
@@ -103,6 +122,7 @@ export interface PortfolioSettings {
 
 export interface PortfolioState {
   holdings: Holding[];
+  transfers: Transfer[];
   settings: PortfolioSettings;
 }
 
@@ -114,6 +134,7 @@ export function defaultState(): PortfolioState {
   const base = defaultScenario("Base case");
   return {
     holdings: [],
+    transfers: [],
     settings: {
       baseCurrency: "AUD",
       fxRates: { AUD: 1 },

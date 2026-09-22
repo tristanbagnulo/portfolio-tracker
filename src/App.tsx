@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { usePortfolio } from "./context/PortfolioContext";
-import { Holding, Scenario } from "./types";
+import { Holding, Scenario, Transfer } from "./types";
 import { currentPortfolioValue, plannedMonthlyContribution } from "./lib/projection";
 import { StatTiles } from "./components/StatTiles";
 import { AllocationChart } from "./components/AllocationChart";
@@ -10,13 +10,16 @@ import { SettingsBar } from "./components/SettingsBar";
 import { ProjectionsPanel } from "./components/ProjectionsPanel";
 import { HistoryPanel } from "./components/HistoryPanel";
 import { FxRateModal } from "./components/FxRateModal";
+import { TransfersList } from "./components/TransfersList";
+import { TransferForm } from "./components/TransferForm";
 import { formatDate } from "./lib/format";
 
 type Tab = "holdings" | "projections" | "history";
 
 export default function App() {
-  const { state, saveHolding, deleteHolding, updateSettings, refreshAll } = usePortfolio();
+  const { state, saveHolding, deleteHolding, saveTransfer, deleteTransfer, updateSettings, refreshAll } = usePortfolio();
   const [modalHolding, setModalHolding] = useState<Holding | "new" | null>(null);
+  const [modalTransfer, setModalTransfer] = useState<Transfer | "new" | null>(null);
   const [editingFxCurrency, setEditingFxCurrency] = useState<string | null>(null);
   const [tab, setTab] = useState<Tab>("holdings");
 
@@ -51,6 +54,19 @@ export default function App() {
       if (!confirm("Delete this holding? This can't be undone.")) return;
       deleteHolding(modalHolding.id);
       setModalHolding(null);
+    }
+  }
+
+  function handleSaveTransfer(transfer: Omit<Transfer, "id"> | Transfer) {
+    saveTransfer(transfer);
+    setModalTransfer(null);
+  }
+
+  function handleDeleteTransfer() {
+    if (modalTransfer && modalTransfer !== "new") {
+      if (!confirm("Delete this transfer? This can't be undone.")) return;
+      deleteTransfer(modalTransfer.id);
+      setModalTransfer(null);
     }
   }
 
@@ -145,12 +161,20 @@ export default function App() {
             <h2>Holdings</h2>
             <HoldingsTable holdings={state.holdings} onEdit={setModalHolding} onDelete={deleteHolding} />
           </div>
+
+          <TransfersList
+            transfers={state.transfers}
+            holdings={state.holdings}
+            onEdit={setModalTransfer}
+            onAdd={() => setModalTransfer("new")}
+          />
         </>
       )}
 
       {tab === "projections" && (
         <ProjectionsPanel
           holdings={state.holdings}
+          transfers={state.transfers}
           settings={state.settings}
           onHorizonChange={(years) => updateSettings({ projectionHorizonYears: years })}
           onScenariosChange={(scenarios: Scenario[]) => updateSettings({ scenarios })}
@@ -168,6 +192,16 @@ export default function App() {
           onSave={handleSave}
           onDelete={modalHolding !== "new" ? handleDeleteFromForm : undefined}
           onClose={() => setModalHolding(null)}
+        />
+      )}
+
+      {modalTransfer && (
+        <TransferForm
+          initial={modalTransfer === "new" ? null : modalTransfer}
+          holdings={state.holdings}
+          onSave={handleSaveTransfer}
+          onDelete={modalTransfer !== "new" ? handleDeleteTransfer : undefined}
+          onClose={() => setModalTransfer(null)}
         />
       )}
 

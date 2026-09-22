@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Holding, PortfolioSettings, Scenario } from "../types";
+import { Holding, PortfolioSettings, Scenario, Transfer } from "../types";
 import { projectScenarios } from "../lib/projection";
 import { formatCompact } from "../lib/format";
 import { ProjectionChart, scenarioColor } from "./ProjectionChart";
@@ -8,12 +8,14 @@ import { ScenarioManager } from "./ScenarioManager";
 
 export function ProjectionsPanel({
   holdings,
+  transfers,
   settings,
   onHorizonChange,
   onScenariosChange,
   onVisibleChange,
 }: {
   holdings: Holding[];
+  transfers: Transfer[];
   settings: PortfolioSettings;
   onHorizonChange: (years: number) => void;
   onScenariosChange: (scenarios: Scenario[]) => void;
@@ -24,7 +26,7 @@ export function ProjectionsPanel({
 
   const { baseCurrency, fxRates, scenarios, visibleScenarioIds, projectionHorizonYears: horizon } = settings;
   const visibleScenarios = scenarios.filter((s) => visibleScenarioIds.includes(s.id));
-  const results = projectScenarios(holdings, visibleScenarios, baseCurrency, fxRates, horizon);
+  const results = projectScenarios(holdings, transfers, visibleScenarios, baseCurrency, fxRates, horizon);
 
   function toggleVisible(id: string) {
     if (visibleScenarioIds.includes(id)) {
@@ -115,8 +117,8 @@ export function ProjectionsPanel({
       <section className="card">
         <h2>Projected wealth</h2>
         <p className="help" style={{ marginTop: -6, marginBottom: 12 }}>
-          Every holding compounds monthly at its scenario's rate for its asset class, plus your scheduled contributions.
-          Exchange rates are held at today's values for the whole projection.
+          Every holding compounds monthly at its scenario's rate for its asset class, plus your scheduled contributions and
+          transfers between holdings. Exchange rates are held at today's values for the whole projection.
         </p>
         <ProjectionChart results={results} baseCurrency={baseCurrency} horizonYears={horizon} />
       </section>

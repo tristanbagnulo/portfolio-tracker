@@ -1,5 +1,6 @@
-import { AssetClass, ContributionSchedule, FREQUENCY_PER_YEAR, Holding, Scenario } from "../types";
+import { AssetClass, Holding, Scenario, Transfer } from "../types";
 import { convert } from "./fx";
+import { amountForMonth, monthlyEquivalent, startOfMonth } from "./schedule";
 
 export interface ProjectionPoint {
   monthIndex: number; // 0 = today
@@ -19,41 +20,9 @@ export interface ScenarioProjection {
   milestones: Milestone[];
 }
 
-/** Normalizes any contribution frequency to an equivalent smooth monthly amount,
- * in the holding's currency. "once" is handled separately since it fires
- * in a single month rather than repeating — smoothing it would misrepresent it. */
-function monthlyEquivalent(schedule: ContributionSchedule): number {
-  if (schedule.frequency === "once") return 0;
-  return (schedule.amount * FREQUENCY_PER_YEAR[schedule.frequency]) / 12;
-}
-
-function isActiveInMonth(schedule: ContributionSchedule, monthDate: Date): boolean {
-  const start = new Date(schedule.startDate);
-  if (monthDate < startOfMonth(start)) return false;
-  if (schedule.endDate) {
-    const end = new Date(schedule.endDate);
-    if (monthDate > startOfMonth(end)) return false;
-  }
-  return true;
-}
-
-function startOfMonth(d: Date): Date {
-  return new Date(d.getFullYear(), d.getMonth(), 1);
-}
-
-function sameMonth(a: Date, b: Date): boolean {
-  return a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth();
-}
-
 function monthlyContributionFor(holding: Holding, monthDate: Date): number {
   let total = 0;
-  for (const s of holding.contributions) {
-    if (s.frequency === "once") {
-      if (sameMonth(new Date(s.startDate), monthDate)) total += s.amount;
-      continue;
-    }
-    if (isActiveInMonth(s, monthDate)) total += monthlyEquivalent(s);
-  }
+  for (const s of holding.contributions) total += amountForMonth(s, monthDate);
   return total;
 }
 
@@ -80,6 +49,7 @@ const EMPTY_BY_CLASS = (): Record<AssetClass, number> => ({
  */
 export function projectScenario(
   holdings: Holding[],
+  transfers: Transfer[],
   scenario: Scenario,
   baseCurrency: string,
   fxRates: Record<string, number>,
@@ -88,6 +58,11 @@ export function projectScenario(
   const months = horizonYears * 12;
   const today = startOfMonth(new Date());
   const usable = convertibleHoldings(holdings, baseCurrency, fxRates);
+  const usableIds = new Set(usable.map((h) => h.id));
+  const byId = new Map(usable.map((h) => [h.id, h]));
+  // Only simulate a transfer if both ends are holdings we can actually value —
+  // one leg pointing at a deleted or unconvertible holding just gets skipped.
+  const relevantTransfers = transfers.filter((t) => usableIds.has(t.fromHoldingId) && usableIds.has(t.toHoldingId));
 
   const nativeValues = new Map<string, number>();
   for (const h of usable) nativeValues.set(h.id, h.value);
@@ -108,6 +83,19 @@ export function projectScenario(
         const prev = nativeValues.get(h.id)!;
         const contribution = monthlyContributionFor(h, monthDate);
         nativeValues.set(h.id, prev * (1 + rate) + contribution);
+      }
+
+      // Transfers move already-tracked money between two holdings — applied after
+      // growth/contributions so a transfer this month moves this month's contributed
+      // amount too, not last month's stale balance.
+      for (const t of relevantTransfers) {
+        const amount = amountForMonth(t, monthDate);
+        if (amount === 0) continue;
+        const fromHolding = byId.get(t.fromHoldingId)!;
+        const toHolding = byId.get(t.toHoldingId)!;
+        nativeValues.set(t.fromHoldingId, nativeValues.get(t.fromHoldingId)! - amount);
+        const convertedToDest = convert(amount, fromHolding.currency, toHolding.currency, fxRates) ?? 0;
+        nativeValues.set(t.toHoldingId, nativeValues.get(t.toHoldingId)! + convertedToDest);
       }
     }
 
@@ -130,6 +118,7 @@ export function projectScenario(
 
 export function projectScenarios(
   holdings: Holding[],
+  transfers: Transfer[],
   scenarios: Scenario[],
   baseCurrency: string,
   fxRates: Record<string, number>,
@@ -137,7 +126,7 @@ export function projectScenarios(
 ): ScenarioProjection[] {
   return scenarios.map((scenario) => ({
     scenario,
-    ...projectScenario(holdings, scenario, baseCurrency, fxRates, horizonYears),
+    ...projectScenario(holdings, transfers, scenario, baseCurrency, fxRates, horizonYears),
   }));
 }
 

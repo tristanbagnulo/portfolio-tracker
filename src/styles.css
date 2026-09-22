@@ -362,10 +362,12 @@ th.num {
 
 .contribution-row {
   display: grid;
-  grid-template-columns: 1fr 110px 1fr 1fr auto;
+  grid-template-columns: repeat(auto-fit, minmax(110px, 1fr));
   gap: 6px;
   align-items: end;
   margin-bottom: 8px;
+  padding-bottom: 8px;
+  border-bottom: 1px dashed var(--border);
 }
 
 .modal-actions {
