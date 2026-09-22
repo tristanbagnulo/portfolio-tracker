@@ -26,12 +26,28 @@ or a high-interest savings account in AUD).
   backup" to save a JSON snapshot and "Import backup" to restore it — this is
   also how you'd move data to another device for now.
 
-## Local development
+## Running it
+
+This is kept private and local-only on purpose — no public hosting, nothing
+leaves this machine except the anonymous price/FX lookups described above (no
+amounts, no identifying data).
 
 ```bash
 npm install
-npm run dev
+npm run dev       # dev server, e.g. http://localhost:5173
 ```
+
+Or build once and run the static output:
+
+```bash
+npm run build
+npm run preview   # serves dist/, e.g. http://localhost:4173
+```
+
+Your data lives in that browser's `localStorage`, tied to whichever origin
+(`localhost:5173` vs `:4173`, or a different machine) you open it from. Use
+**Export backup** regularly and **Import backup** to move data between
+machines or origins — it's also your only backup if browser data gets cleared.
 
 ## Roadmap
 
@@ -41,9 +57,3 @@ exchange/bank integrations to pull holdings and transactions automatically,
 historical price tracking (so "gain since inception" can be computed rather than
 assumed), and Monte Carlo-style projections instead of a single deterministic
 growth-rate path.
-
-## Deploy
-
-Pushes to `main` build and deploy to GitHub Pages automatically (see
-`.github/workflows/deploy.yml`). Enable Pages for this repo with source "GitHub
-Actions" under Settings → Pages.
