@@ -8,11 +8,14 @@ import { useAuth } from "../context/AuthContext";
 export function CloudSyncBar() {
   const { user, signInError, signIn, signOut } = useAuth();
 
-  if (user === undefined) return null; // initial auth check in flight — avoid a flash
+  // Renders just its own content, not a full row — the parent (App.tsx) shares this
+  // row with BuildBadge, so returning null here (auth check still in flight) still
+  // leaves the badge visible instead of blanking the whole row.
+  if (user === undefined) return null;
 
   if (user === null) {
     return (
-      <div className="toolbar" style={{ justifyContent: "flex-end", marginBottom: 4 }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
         <button className="link-btn" onClick={() => signIn()}>
           Sign in with Google to back up to the cloud
         </button>
@@ -22,7 +25,7 @@ export function CloudSyncBar() {
   }
 
   return (
-    <div className="toolbar" style={{ justifyContent: "flex-end", marginBottom: 4, alignItems: "center", gap: 8 }}>
+    <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
       <span style={{ fontSize: 12, color: "var(--text-muted)" }}>
         Synced as {user.displayName ?? user.email}
       </span>

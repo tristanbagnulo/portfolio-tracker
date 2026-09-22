@@ -14,6 +14,7 @@ import { TransfersList } from "./components/TransfersList";
 import { TransferForm } from "./components/TransferForm";
 import { LoadIssueBanner } from "./components/LoadIssueBanner";
 import { CloudSyncBar } from "./components/CloudSyncBar";
+import { BuildBadge } from "./components/BuildBadge";
 import { formatDate } from "./lib/format";
 
 type Tab = "holdings" | "projections" | "history";
@@ -85,7 +86,10 @@ export default function App() {
 
   return (
     <div className="app">
-      <CloudSyncBar />
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 4, gap: 8 }}>
+        <BuildBadge />
+        <CloudSyncBar />
+      </div>
       <div className="app-header">
         <div>
           <h1>Portfolio Tracker</h1>
