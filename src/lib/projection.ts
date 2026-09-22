@@ -6,12 +6,19 @@ export interface ProjectionPoint {
   monthIndex: number; // 0 = today
   date: string; // ISO date, first of month
   totalBase: number;
+  /** Net principal: today's starting value plus every contribution since (withdrawals
+   * subtract), converted at the same held-constant fx snapshot as everything else.
+   * Transfers don't touch this — moving money between two of your own holdings isn't
+   * new principal in or out of the portfolio. `totalBase - contributedBase` is what a
+   * "returns projection" calls growth: the part compounding actually added. */
+  contributedBase: number;
 }
 
 export interface Milestone {
   years: number;
   date: string;
   totalBase: number;
+  contributedBase: number;
 }
 
 export interface ScenarioProjection {
@@ -67,6 +74,9 @@ export function projectScenario(
   const nativeValues = new Map<string, number>();
   for (const h of usable) nativeValues.set(h.id, h.value);
 
+  let contributedBase = 0;
+  for (const h of usable) contributedBase += convert(h.value, h.currency, baseCurrency, fxRates) ?? 0;
+
   const series: ProjectionPoint[] = [];
   const milestoneMarks = Array.from(new Set([1, 5, 10, 20, 30, horizonYears])).filter(
     (y) => y >= 1 && y <= horizonYears,
@@ -83,6 +93,7 @@ export function projectScenario(
         const prev = nativeValues.get(h.id)!;
         const contribution = monthlyContributionFor(h, monthDate);
         nativeValues.set(h.id, prev * (1 + rate) + contribution);
+        contributedBase += convert(contribution, h.currency, baseCurrency, fxRates) ?? 0;
       }
 
       // Transfers move already-tracked money between two holdings — applied after
@@ -106,10 +117,10 @@ export function projectScenario(
     }
 
     const dateStr = monthDate.toISOString().slice(0, 10);
-    series.push({ monthIndex: m, date: dateStr, totalBase });
+    series.push({ monthIndex: m, date: dateStr, totalBase, contributedBase });
 
     if (m % 12 === 0 && milestoneMarks.includes(m / 12)) {
-      milestones.push({ years: m / 12, date: dateStr, totalBase });
+      milestones.push({ years: m / 12, date: dateStr, totalBase, contributedBase });
     }
   }
 

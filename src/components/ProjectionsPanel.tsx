@@ -1,8 +1,9 @@
 import { useState } from "react";
 import { Holding, PortfolioSettings, Scenario, Transfer } from "../types";
 import { projectScenarios } from "../lib/projection";
-import { formatCompact } from "../lib/format";
+import { formatCompact, formatMoney } from "../lib/format";
 import { ProjectionChart, scenarioColor } from "./ProjectionChart";
+import { ReturnsBreakdownChart } from "./ReturnsBreakdownChart";
 import { ScenarioForm } from "./ScenarioForm";
 import { ScenarioManager } from "./ScenarioManager";
 
@@ -23,10 +24,17 @@ export function ProjectionsPanel({
 }) {
   const [editing, setEditing] = useState<Scenario | "new" | null>(null);
   const [managing, setManaging] = useState(false);
+  const [breakdownScenarioId, setBreakdownScenarioId] = useState<string | null>(null);
 
   const { baseCurrency, fxRates, scenarios, visibleScenarioIds, projectionHorizonYears: horizon } = settings;
   const visibleScenarios = scenarios.filter((s) => visibleScenarioIds.includes(s.id));
   const results = projectScenarios(holdings, transfers, visibleScenarios, baseCurrency, fxRates, horizon);
+
+  const breakdownIndex = Math.max(
+    0,
+    results.findIndex((r) => r.scenario.id === breakdownScenarioId),
+  );
+  const breakdownResult = results[breakdownIndex] ?? results[0];
 
   function toggleVisible(id: string) {
     if (visibleScenarioIds.includes(id)) {
@@ -122,6 +130,49 @@ export function ProjectionsPanel({
         </p>
         <ProjectionChart results={results} baseCurrency={baseCurrency} horizonYears={horizon} />
       </section>
+
+      {breakdownResult && (
+        <section className="card">
+          <div className="toolbar" style={{ justifyContent: "space-between", marginBottom: 4 }}>
+            <h2 style={{ margin: 0 }}>Returns breakdown</h2>
+            {results.length > 1 && (
+              <select
+                value={breakdownResult.scenario.id}
+                onChange={(e) => setBreakdownScenarioId(e.target.value)}
+                style={{ fontSize: 13 }}
+              >
+                {results.map((r) => (
+                  <option key={r.scenario.id} value={r.scenario.id}>
+                    {r.scenario.name}
+                  </option>
+                ))}
+              </select>
+            )}
+          </div>
+          <p className="help" style={{ marginTop: -6, marginBottom: 12 }}>
+            How much of {breakdownResult.scenario.name}'s projected total is money you put in versus what compounding
+            actually earned.
+          </p>
+          {(() => {
+            const last = breakdownResult.series[breakdownResult.series.length - 1];
+            const growth = last.totalBase - last.contributedBase;
+            return (
+              <p style={{ margin: "0 0 12px", fontSize: 14 }}>
+                In {horizon} {horizon === 1 ? "year" : "years"}, projected {formatMoney(last.totalBase, baseCurrency)} ={" "}
+                {formatMoney(last.contributedBase, baseCurrency)} contributed
+                {growth >= 0 ? " + " : " − "}
+                {formatMoney(Math.abs(growth), baseCurrency)} growth.
+              </p>
+            );
+          })()}
+          <ReturnsBreakdownChart
+            series={breakdownResult.series}
+            baseCurrency={baseCurrency}
+            horizonYears={horizon}
+            color={scenarioColor(breakdownIndex)}
+          />
+        </section>
+      )}
 
       {results.length > 0 && (
         <section className="card">
