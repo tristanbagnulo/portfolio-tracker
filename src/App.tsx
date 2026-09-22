@@ -12,12 +12,24 @@ import { HistoryPanel } from "./components/HistoryPanel";
 import { FxRateModal } from "./components/FxRateModal";
 import { TransfersList } from "./components/TransfersList";
 import { TransferForm } from "./components/TransferForm";
+import { LoadIssueBanner } from "./components/LoadIssueBanner";
 import { formatDate } from "./lib/format";
 
 type Tab = "holdings" | "projections" | "history";
 
 export default function App() {
-  const { state, saveHolding, deleteHolding, saveTransfer, deleteTransfer, updateSettings, refreshAll } = usePortfolio();
+  const {
+    state,
+    saveHolding,
+    deleteHolding,
+    saveTransfer,
+    deleteTransfer,
+    updateSettings,
+    refreshAll,
+    loadIssue,
+    dismissLoadIssue,
+    importData,
+  } = usePortfolio();
   const [modalHolding, setModalHolding] = useState<Holding | "new" | null>(null);
   const [modalTransfer, setModalTransfer] = useState<Transfer | "new" | null>(null);
   const [editingFxCurrency, setEditingFxCurrency] = useState<string | null>(null);
@@ -81,6 +93,10 @@ export default function App() {
           + Add holding
         </button>
       </div>
+
+      {loadIssue && (
+        <LoadIssueBanner issue={loadIssue} onDismiss={dismissLoadIssue} onImport={importData} />
+      )}
 
       <SettingsBar />
 

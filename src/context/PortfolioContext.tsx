@@ -7,6 +7,12 @@ import { newId } from "../lib/id";
 
 const AUTO_REFRESH_MS = 5 * 60 * 1000;
 
+export interface LoadIssue {
+  recoveredFromBackup: boolean;
+  loadError: boolean;
+  unparseable: string | null;
+}
+
 interface PortfolioContextValue {
   state: PortfolioState;
   addHolding: (holding: Omit<Holding, "id">) => void;
@@ -24,12 +30,27 @@ interface PortfolioContextValue {
   lastPriceResult: PriceRefreshResult | null;
   exportData: () => void;
   importData: (text: string) => void;
+  /** Set when the saved data existed but couldn't be read (and no backup generation
+   * saved it either). The app MUST show this to the person before any further save
+   * happens — see `dismissLoadIssue`, the only thing allowed to clear it. */
+  loadIssue: LoadIssue | null;
+  dismissLoadIssue: () => void;
 }
 
 const PortfolioContext = createContext<PortfolioContextValue | null>(null);
 
 export function PortfolioProvider({ children }: { children: React.ReactNode }) {
-  const [state, setState] = useState<PortfolioState>(() => loadState());
+  const initialLoad = useRef(loadState()).current;
+  const [state, setState] = useState<PortfolioState>(initialLoad.state);
+  const [loadIssue, setLoadIssue] = useState<LoadIssue | null>(
+    initialLoad.loadError || initialLoad.recoveredFromBackup
+      ? {
+          recoveredFromBackup: initialLoad.recoveredFromBackup,
+          loadError: initialLoad.loadError,
+          unparseable: initialLoad.unparseable,
+        }
+      : null,
+  );
   const [fxStatus, setFxStatus] = useState<"idle" | "loading" | "error">("idle");
   const [fxError, setFxError] = useState<string | null>(null);
   const [priceStatus, setPriceStatus] = useState<"idle" | "loading">("idle");
@@ -38,9 +59,16 @@ export function PortfolioProvider({ children }: { children: React.ReactNode }) {
   const stateRef = useRef(state);
   stateRef.current = state;
 
+  const dismissLoadIssue = useCallback(() => setLoadIssue(null), []);
+
   useEffect(() => {
+    // Never write over the primary key while an unresolved load failure means we might
+    // be persisting an empty state on top of data that's still sitting there unreadable.
+    // A "recovered from backup" case is safe to save immediately — we already have a
+    // good state, and doing so re-establishes both the primary and backup slots as good.
+    if (loadIssue?.loadError) return;
     saveState(state);
-  }, [state]);
+  }, [state, loadIssue]);
 
   const addHolding = useCallback((holding: Omit<Holding, "id">) => {
     setState((s) => ({ ...s, holdings: [...s.holdings, { ...holding, id: newId() }] }));
@@ -152,6 +180,9 @@ export function PortfolioProvider({ children }: { children: React.ReactNode }) {
   const importData = useCallback((text: string) => {
     const parsed = parseImportedState(text);
     setState(parsed);
+    // A successful import is itself a resolution to any unreadable-data situation —
+    // safe to resume normal saving with this known-good state.
+    setLoadIssue(null);
   }, []);
 
   const value = useMemo<PortfolioContextValue>(
@@ -172,6 +203,8 @@ export function PortfolioProvider({ children }: { children: React.ReactNode }) {
       lastPriceResult,
       exportData,
       importData,
+      loadIssue,
+      dismissLoadIssue,
     }),
     [
       state,
@@ -190,6 +223,8 @@ export function PortfolioProvider({ children }: { children: React.ReactNode }) {
       lastPriceResult,
       exportData,
       importData,
+      loadIssue,
+      dismissLoadIssue,
     ],
   );
 
