@@ -1,5 +1,12 @@
 import { useState } from "react";
-import { ASSET_CLASS_LABELS, ASSET_CLASSES, AssetClass, DEFAULT_GROWTH_PCT, Scenario } from "../types";
+import {
+  ASSET_CLASS_LABELS,
+  ASSET_CLASSES,
+  AssetClass,
+  DEFAULT_GROWTH_PCT,
+  DEFAULT_INCOME_GROWTH_PCT,
+  Scenario,
+} from "../types";
 import { ASSET_CLASS_COLOR_VAR } from "../lib/colors";
 import { newId } from "../lib/id";
 
@@ -18,10 +25,11 @@ export function ScenarioForm({
 }) {
   const [name, setName] = useState(initial?.name ?? "");
   const [rates, setRates] = useState<Record<AssetClass, number>>(initial?.rates ?? { ...DEFAULT_GROWTH_PCT });
+  const [incomeGrowthPct, setIncomeGrowthPct] = useState(initial?.incomeGrowthPct ?? DEFAULT_INCOME_GROWTH_PCT);
 
   function submit(e: React.FormEvent) {
     e.preventDefault();
-    onSave({ id: initial?.id ?? newId(), name: name.trim() || "Untitled scenario", rates });
+    onSave({ id: initial?.id ?? newId(), name: name.trim() || "Untitled scenario", rates, incomeGrowthPct });
   }
 
   return (
@@ -37,6 +45,30 @@ export function ScenarioForm({
             onChange={(e) => setName(e.target.value)}
             placeholder="e.g. Conservative, Base case, Bull run"
           />
+        </div>
+
+        <div className="slider-row" style={{ marginBottom: 16 }}>
+          <div className="sr-top">
+            <span className="name">Income growth (scales your contributions)</span>
+            <span className="val">{incomeGrowthPct.toFixed(1)}%/yr</span>
+          </div>
+          <input
+            type="range"
+            min={-10}
+            max={30}
+            step={0.5}
+            value={incomeGrowthPct}
+            onChange={(e) => setIncomeGrowthPct(Number(e.target.value))}
+          />
+          <div className="sr-scale">
+            <span>−10%</span>
+            <span>0%</span>
+            <span>+30%</span>
+          </div>
+          <span className="help">
+            Every scheduled contribution grows at this rate each year, compounding from today — not just the asset
+            it's held in. 0% keeps contributions fixed in today's dollars forever.
+          </span>
         </div>
 
         {ASSET_CLASSES.map((cls) => (

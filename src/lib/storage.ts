@@ -1,4 +1,4 @@
-import { defaultState, defaultTaxTreatmentForClass, Holding, PortfolioState } from "../types";
+import { DEFAULT_INCOME_GROWTH_PCT, defaultState, defaultTaxTreatmentForClass, Holding, PortfolioState } from "../types";
 
 // Every path data can enter this app through (local load, file import, and the
 // Firestore cloud subscription in context/PortfolioContext.tsx) needs the SAME
@@ -18,6 +18,13 @@ export function sanitizeState(parsed: {
   const holdings: Holding[] = Array.isArray(parsed.holdings) ? parsed.holdings : [];
   const settings = { ...d.settings, ...parsed.settings };
   if (!settings.scenarios?.length) settings.scenarios = d.settings.scenarios;
+  // A scenario saved before incomeGrowthPct existed defaults to the same starting
+  // assumption a brand-new scenario gets, not 0 — unlike marginalTaxRatePct (where 0
+  // is a genuinely neutral "not set"), 0% income growth is its own assumption, not a
+  // safe no-op, so there's no reason an old scenario should default to it silently.
+  settings.scenarios = settings.scenarios.map((s) =>
+    typeof s.incomeGrowthPct === "number" ? s : { ...s, incomeGrowthPct: DEFAULT_INCOME_GROWTH_PCT },
+  );
   if (!settings.visibleScenarioIds?.length) settings.visibleScenarioIds = settings.scenarios.map((s) => s.id);
   if (typeof settings.marginalTaxRatePct !== "number") settings.marginalTaxRatePct = 0;
   return {

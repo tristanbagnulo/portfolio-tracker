@@ -107,13 +107,22 @@ export interface Holding {
   notes?: string;
 }
 
-/** A named set of assumed annual growth rates, one per asset class. Growth is never
- * attached to a holding — it's a scenario you build and compare, since nobody knows
- * future returns in advance. */
+// Starting point for a NEW scenario's income-growth slider — not a prediction, just has
+// to start somewhere. 10%/yr is an aggressive-but-plausible early/mid-career assumption.
+export const DEFAULT_INCOME_GROWTH_PCT = 10;
+
+/** A named set of assumed annual growth rates, one per asset class, plus one assumed
+ * annual growth rate for your contribution amounts (`incomeGrowthPct`) — the idea being
+ * that if your income grows, what you're able to contribute each month probably does
+ * too, rather than staying fixed in nominal dollars for a 20-year projection. Applied
+ * uniformly to every contribution schedule regardless of which holding it funds; never
+ * attached to a holding itself — this is a scenario you build and compare, since nobody
+ * knows future returns (or future income) in advance. */
 export interface Scenario {
   id: string;
   name: string;
   rates: Record<AssetClass, number>;
+  incomeGrowthPct: number;
 }
 
 /** A recurring (or one-off) movement of money from one of your holdings to another —
@@ -158,7 +167,7 @@ export interface PortfolioState {
 }
 
 function defaultScenario(name: string): Scenario {
-  return { id: crypto.randomUUID(), name, rates: { ...DEFAULT_GROWTH_PCT } };
+  return { id: crypto.randomUUID(), name, rates: { ...DEFAULT_GROWTH_PCT }, incomeGrowthPct: DEFAULT_INCOME_GROWTH_PCT };
 }
 
 export function defaultState(): PortfolioState {

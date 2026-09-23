@@ -56,7 +56,10 @@ const EMPTY_BY_CLASS = (): Record<AssetClass, number> => ({
  * is always on; there's no "simple growth" mode. `marginalTaxRatePct` (0 = untaxed,
  * today's default) is applied to each month's GROWTH only — never to contributions,
  * that's already post-tax money — at a rate scaled per holding by its tax treatment;
- * see lib/tax.ts.
+ * see lib/tax.ts. Every contribution amount also grows at the scenario's
+ * `incomeGrowthPct` (compounding annually from today) — a fixed monthly dollar amount
+ * 20 years out assuming income never changes isn't realistic. Transfers are exempt:
+ * they move money you already have, not new money in from income.
  */
 export function projectScenario(
   holdings: Holding[],
@@ -92,13 +95,18 @@ export function projectScenario(
     const monthDate = new Date(today.getFullYear(), today.getMonth() + m, 1);
 
     if (m > 0) {
+      // Compounds from today regardless of when an individual contribution schedule
+      // starts — the assumption is "income grows over time," not "income grows only
+      // once this particular contribution kicks in."
+      const incomeGrowthFactor = Math.pow(1 + (scenario.incomeGrowthPct ?? 0) / 100, m / 12);
+
       for (const h of usable) {
         const ratePct = scenario.rates[h.assetClass] ?? 0;
         const grossRate = Math.pow(1 + ratePct / 100, 1 / 12) - 1;
         const prev = nativeValues.get(h.id)!;
         const taxRatePct = effectiveTaxRatePct(h.taxTreatment, marginalTaxRatePct);
         const afterTaxGrowth = prev * grossRate * (1 - taxRatePct / 100);
-        const contribution = monthlyContributionFor(h, monthDate);
+        const contribution = monthlyContributionFor(h, monthDate) * incomeGrowthFactor;
         nativeValues.set(h.id, prev + afterTaxGrowth + contribution);
         contributedBase += convert(contribution, h.currency, baseCurrency, fxRates) ?? 0;
       }
