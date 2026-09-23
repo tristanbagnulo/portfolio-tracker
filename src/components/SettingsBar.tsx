@@ -1,7 +1,8 @@
-import { useRef } from "react";
+import { useRef, useState } from "react";
 import { CURRENCIES } from "../types";
 import { usePortfolio } from "../context/PortfolioContext";
 import { formatDate } from "../lib/format";
+import { TaxRateCalculatorModal } from "./TaxRateCalculatorModal";
 
 export function SettingsBar() {
   const {
@@ -18,6 +19,7 @@ export function SettingsBar() {
   } = usePortfolio();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const refreshing = priceStatus === "loading" || fxStatus === "loading";
+  const [showTaxCalc, setShowTaxCalc] = useState(false);
 
   function handleImportClick() {
     fileInputRef.current?.click();
@@ -68,6 +70,9 @@ export function SettingsBar() {
               placeholder="0"
             />
             <span style={{ fontSize: 13, color: "var(--text-secondary)" }}>%</span>
+            <button type="button" className="link-btn" onClick={() => setShowTaxCalc(true)}>
+              Estimate
+            </button>
           </div>
           <label style={{ display: "flex", alignItems: "center", gap: 5, fontSize: 13 }}>
             <input
@@ -98,6 +103,15 @@ export function SettingsBar() {
           {lastPriceResult.updated.length} price{lastPriceResult.updated.length === 1 ? "" : "s"} updated live.{" "}
           {lastPriceResult.failed.length} couldn't be fetched — left as manual (e.g. blocked lookup, no symbol match).
         </div>
+      )}
+      {showTaxCalc && (
+        <TaxRateCalculatorModal
+          onUse={(ratePct) => {
+            updateSettings({ marginalTaxRatePct: ratePct });
+            setShowTaxCalc(false);
+          }}
+          onClose={() => setShowTaxCalc(false)}
+        />
       )}
     </div>
   );
