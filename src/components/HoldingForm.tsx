@@ -135,6 +135,11 @@ export function HoldingForm({
 }) {
   const [draft, setDraft] = useState<Draft>(() => initial ?? blankHolding(baseCurrency));
   const [quickAsset, setQuickAsset] = useState<QuickAsset | null>(() => matchingQuickAsset(initial));
+  // Gold's `quantity` is always stored in grams (lib/prices.ts converts the live PAXG
+  // price, which is per troy ounce, to per-gram before it ever reaches here) — this is
+  // purely which unit the input itself is showing right now, nobody outside the US
+  // thinks in troy ounces for physical gold.
+  const [goldUnit, setGoldUnit] = useState<"g" | "kg">("g");
 
   function set<K extends keyof Holding>(key: K, value: Holding[K]) {
     setDraft((d) => ({ ...d, [key]: value }));
@@ -276,26 +281,59 @@ export function HoldingForm({
             </div>
 
             <div className="form-field">
-              <label>Quantity</label>
+              <label>Quantity{quickAsset.key === "gold" ? ` (${goldUnit})` : ""}</label>
               <input
                 type="number"
                 step="any"
                 autoFocus
-                value={emptyIfZero(draft.quantity)}
-                onChange={(e) => set("quantity", Number(e.target.value))}
-                placeholder={quickAsset.key === "gold" ? "troy ounces" : "e.g. 0.5"}
+                value={
+                  quickAsset.key === "gold"
+                    ? emptyIfZero(goldUnit === "kg" ? (draft.quantity ?? 0) / 1000 : draft.quantity)
+                    : emptyIfZero(draft.quantity)
+                }
+                onChange={(e) => {
+                  const n = Number(e.target.value);
+                  set("quantity", quickAsset.key === "gold" && goldUnit === "kg" ? n * 1000 : n);
+                }}
+                placeholder="e.g. 0.5"
               />
             </div>
-            <div className="form-field">
-              <label>Currency</label>
-              <select value={draft.currency} onChange={(e) => set("currency", e.target.value)}>
-                {CURRENCIES.map((c) => (
-                  <option key={c.code} value={c.code}>
-                    {c.code}
-                  </option>
-                ))}
-              </select>
-            </div>
+            {quickAsset.key === "gold" ? (
+              <div className="form-field">
+                <label>Unit</label>
+                <div className="seg-toggle">
+                  <button type="button" className={goldUnit === "g" ? "active" : ""} onClick={() => setGoldUnit("g")}>
+                    Grams
+                  </button>
+                  <button type="button" className={goldUnit === "kg" ? "active" : ""} onClick={() => setGoldUnit("kg")}>
+                    Kilograms
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <div className="form-field">
+                <label>Currency</label>
+                <select value={draft.currency} onChange={(e) => set("currency", e.target.value)}>
+                  {CURRENCIES.map((c) => (
+                    <option key={c.code} value={c.code}>
+                      {c.code}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
+            {quickAsset.key === "gold" && (
+              <div className="form-field span-2">
+                <label>Currency</label>
+                <select value={draft.currency} onChange={(e) => set("currency", e.target.value)}>
+                  {CURRENCIES.map((c) => (
+                    <option key={c.code} value={c.code}>
+                      {c.code}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
 
             {convertedPreview != null && (
               <div className="form-field span-2 help">≈ {formatMoney(convertedPreview, baseCurrency)}</div>
@@ -466,7 +504,7 @@ export function HoldingForm({
                   {draft.assetClass === "crypto"
                     ? "Reliable — fetched from CoinGecko's free public API, refreshed automatically."
                     : draft.assetClass === "precious_metal"
-                      ? "Gold only, via PAX Gold (PAXG) — a token pegged 1:1 to a troy ounce, so it can carry a small premium or discount vs spot. Other metals have no free live source; leave blank and update manually."
+                      ? "Gold only, via PAX Gold (PAXG) — a token pegged 1:1 to a troy ounce, converted automatically to a price per GRAM (so quantity below should be grams, not troy ounces). Can carry a small premium or discount vs spot. Other metals have no free live source; leave blank and update manually."
                       : "Best-effort — an unauthenticated lookup that can fail; value will stay manual if it does."}
                 </span>
               </div>

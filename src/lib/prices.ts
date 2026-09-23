@@ -2,6 +2,14 @@ import { Holding } from "../types";
 
 const COINGECKO_BASE = "https://api.coingecko.com/api/v3";
 
+// PAX Gold (and every other CoinGecko-listed tokenized-gold coin) is quoted per troy
+// ounce, but nobody outside the US holds physical gold in troy ounces — grams and
+// kilograms are the actual convention almost everywhere. Converting here, once, means
+// `quantity * price` is correct for a gram-denominated holding without the rest of the
+// app (or the person typing in a quantity) ever needing to think about troy ounces.
+const GRAMS_PER_TROY_OUNCE = 31.1034768;
+const PRICED_PER_TROY_OUNCE = new Set(["pax-gold"]);
+
 export interface PriceRefreshResult {
   updated: string[]; // holding ids
   skipped: string[]; // holding ids with no live source available (manual only)
@@ -56,8 +64,10 @@ async function fetchEquityPrice(
  * Crypto AND precious metals both go through CoinGecko (reliable, CORS-open) — gold's
  * lookup id is a tokenized-gold coin (e.g. "pax-gold", pegged ~1:1 to a troy ounce of
  * gold) since CoinGecko doesn't distinguish "coin id" from "commodity id"; the fetch
- * itself is identical either way. Equities/other go through a best-effort Yahoo lookup
- * that may simply fail. Cash/savings has no live source and is always manual entry.
+ * itself is identical either way, converted to a per-gram price before use (see
+ * GRAMS_PER_TROY_OUNCE above) since `quantity` for a gold holding is grams, not troy
+ * ounces. Equities/other go through a best-effort Yahoo lookup that may simply fail.
+ * Cash/savings has no live source and is always manual entry.
  */
 export async function refreshLivePrices(
   holdings: Holding[],
@@ -81,8 +91,9 @@ export async function refreshLivePrices(
     try {
       const prices = await fetchCoingeckoPrices(ids, vs);
       for (const h of group) {
-        const price = prices[h.lookupSymbol!];
-        if (typeof price === "number") {
+        const rawPrice = prices[h.lookupSymbol!];
+        if (typeof rawPrice === "number") {
+          const price = PRICED_PER_TROY_OUNCE.has(h.lookupSymbol!) ? rawPrice / GRAMS_PER_TROY_OUNCE : rawPrice;
           priceById.set(h.id, price);
         } else {
           result.failed.push({ id: h.id, reason: `No CoinGecko price for id "${h.lookupSymbol}"` });
