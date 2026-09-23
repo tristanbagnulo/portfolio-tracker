@@ -3,6 +3,7 @@ import { Holding, PortfolioSettings, PortfolioState, Transfer } from "../types";
 import { loadState, saveState, exportStateAsFile, parseImportedState, sanitizeState } from "../lib/storage";
 import { fetchFxRates } from "../lib/fx";
 import { refreshLivePrices, PriceRefreshResult } from "../lib/prices";
+import { applyDueTransfers } from "../lib/transferExecution";
 import { newId } from "../lib/id";
 import { useAuth } from "./AuthContext";
 // lib/cloudSync (and the Firebase SDK it pulls in) is dynamically imported only where
@@ -229,6 +230,15 @@ export function PortfolioProvider({ children }: { children: React.ReactNode }) {
       setFxError(err instanceof Error ? err.message : "FX refresh failed");
     }
     setLastRefreshedAt(new Date().toISOString());
+
+    // Applies any transfer occurrences that have become due — real changes to real
+    // holding values, using whatever FX rates just landed above. Runs on every refresh
+    // cycle (mount, the 5-minute interval, "Refresh now", right after saving a
+    // holding), which is the only cadence a client-side app can check on — there's no
+    // background process while the tab is closed, so a missed window is always caught
+    // up on the next time the app is open. Reads the latest state via the updater
+    // function since state may have moved on during the awaits above.
+    setState((s) => applyDueTransfers(s));
   }, []);
 
   // Manual/periodic refresh of everything currently held, reading the latest state

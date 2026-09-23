@@ -142,6 +142,12 @@ export interface Transfer {
   frequency: ContributionFrequency;
   startDate: string;
   endDate?: string;
+  /** ISO date (yyyy-mm-dd) through which this transfer's real occurrences have already
+   * been applied to the actual current holding values — see lib/transferExecution.ts.
+   * Undefined means never applied yet (a brand-new transfer, or one that predates this
+   * field). This is the idempotency guard: re-checking before the next occurrence is
+   * due is always a safe no-op. */
+  lastAppliedDate?: string;
 }
 
 export interface PortfolioSettings {

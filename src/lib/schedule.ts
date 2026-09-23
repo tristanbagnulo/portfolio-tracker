@@ -43,3 +43,51 @@ export function amountForMonth(schedule: RecurringSchedule, monthDate: Date): nu
   }
   return isActiveInMonth(schedule, monthDate) ? monthlyEquivalent(schedule) : 0;
 }
+
+function stepDate(d: Date, frequency: Exclude<ContributionFrequency, "once">): Date {
+  const next = new Date(d);
+  switch (frequency) {
+    case "weekly":
+      next.setDate(next.getDate() + 7);
+      break;
+    case "fortnightly":
+      next.setDate(next.getDate() + 14);
+      break;
+    case "monthly":
+      next.setMonth(next.getMonth() + 1);
+      break;
+    case "quarterly":
+      next.setMonth(next.getMonth() + 3);
+      break;
+    case "annually":
+      next.setFullYear(next.getFullYear() + 1);
+      break;
+  }
+  return next;
+}
+
+/** Real calendar occurrence dates for a schedule, strictly after `afterExclusive`
+ * (null = from the very start) and up to `throughInclusive` — unlike amountForMonth's
+ * smoothed monthly rate (built for long-horizon projections), this is exact dates for
+ * actually applying a schedule to real balances. A schedule untouched for months (or
+ * years) correctly yields every occurrence that should have already happened, not just
+ * the most recent one — this is meant to be summed, not sampled. */
+export function occurrencesBetween(schedule: RecurringSchedule, afterExclusive: Date | null, throughInclusive: Date): Date[] {
+  const start = new Date(`${schedule.startDate}T00:00:00`);
+  const end = schedule.endDate ? new Date(`${schedule.endDate}T00:00:00`) : null;
+  const dates: Date[] = [];
+
+  if (schedule.frequency === "once") {
+    const due = (!afterExclusive || start > afterExclusive) && start <= throughInclusive;
+    if (due) dates.push(start);
+    return dates;
+  }
+
+  let cursor = start;
+  while (cursor <= throughInclusive) {
+    if (end && cursor > end) break;
+    if (!afterExclusive || cursor > afterExclusive) dates.push(new Date(cursor));
+    cursor = stepDate(cursor, schedule.frequency);
+  }
+  return dates;
+}
