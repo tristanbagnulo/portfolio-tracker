@@ -54,6 +54,14 @@ const COMMON_COINGECKO_IDS: Record<string, string> = {
   usdt: "tether",
   "binance coin": "binancecoin",
   bnb: "binancecoin",
+  // Gold has no dedicated spot-price API that's both free and CORS-open, but PAX Gold
+  // (PAXG) is a token pegged 1:1 to a fine troy ounce of physical gold and trades on
+  // CoinGecko like any other coin — close enough to spot for a projection tool, with a
+  // small premium/discount possible. Silver has no equivalent liquid token, so it's
+  // left off this list (stays manual).
+  gold: "pax-gold",
+  "pax gold": "pax-gold",
+  xau: "pax-gold",
 };
 
 function guessCoingeckoId(name: string): string | null {
@@ -108,11 +116,12 @@ export function HoldingForm({
     setDraft((d) => ({ ...d, [key]: value }));
   }
 
-  // Auto-fills the live lookup symbol for a recognizable coin name once the holding
-  // is (or becomes) crypto, but never overwrites one the user already typed themselves.
-  // Name and asset class can be set in either order, so both setters check it.
+  // Auto-fills the live lookup symbol for a recognizable coin/metal name once the
+  // holding is (or becomes) crypto or a precious metal, but never overwrites one the
+  // user already typed themselves. Name and asset class can be set in either order, so
+  // both setters check it.
   function suggestSymbol(name: string, cls: AssetClass, existing: string | undefined): string | undefined {
-    if (cls !== "crypto" || existing) return existing;
+    if ((cls !== "crypto" && cls !== "precious_metal") || existing) return existing;
     return guessCoingeckoId(name) ?? existing;
   }
 
@@ -161,7 +170,10 @@ export function HoldingForm({
 
   const canFetchLive =
     draft.entryMode === "quantity" &&
-    (draft.assetClass === "crypto" || draft.assetClass === "equity" || draft.assetClass === "other");
+    (draft.assetClass === "crypto" ||
+      draft.assetClass === "precious_metal" ||
+      draft.assetClass === "equity" ||
+      draft.assetClass === "other");
 
   const quantityValuePreview =
     draft.entryMode === "quantity" && draft.quantity && draft.price
@@ -326,18 +338,21 @@ export function HoldingForm({
               <input
                 value={draft.lookupSymbol ?? ""}
                 onChange={(e) => set("lookupSymbol", e.target.value)}
-                placeholder={draft.assetClass === "crypto" ? "CoinGecko id, e.g. bitcoin" : "Ticker, e.g. VAS.AX or AAPL"}
+                placeholder={
+                  draft.assetClass === "crypto"
+                    ? "CoinGecko id, e.g. bitcoin"
+                    : draft.assetClass === "precious_metal"
+                      ? "pax-gold for gold — leave blank for silver etc."
+                      : "Ticker, e.g. VAS.AX or AAPL"
+                }
               />
               <span className="help">
                 {draft.assetClass === "crypto"
                   ? "Reliable — fetched from CoinGecko's free public API, refreshed automatically."
-                  : "Best-effort — an unauthenticated lookup that can fail; value will stay manual if it does."}
+                  : draft.assetClass === "precious_metal"
+                    ? "Gold only, via PAX Gold (PAXG) — a token pegged 1:1 to a troy ounce, so it can carry a small premium or discount vs spot. Other metals have no free live source; leave blank and update manually."
+                    : "Best-effort — an unauthenticated lookup that can fail; value will stay manual if it does."}
               </span>
-            </div>
-          )}
-          {draft.entryMode === "quantity" && draft.assetClass === "precious_metal" && (
-            <div className="form-field span-2 help">
-              No free live metals price source yet — update this price manually as it moves.
             </div>
           )}
 

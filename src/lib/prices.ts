@@ -8,9 +8,10 @@ export interface PriceRefreshResult {
   failed: { id: string; reason: string }[];
 }
 
-/** Batch-fetches crypto spot prices from CoinGecko. `ids` are CoinGecko coin ids
+/** Batch-fetches spot prices from CoinGecko — crypto or a tokenized-commodity id like
+ * "pax-gold" alike, CoinGecko treats them identically. `ids` are CoinGecko coin ids
  * (e.g. "bitcoin", not "BTC"). vsCurrency is a lowercase fiat code, e.g. "usd". */
-async function fetchCryptoPrices(
+async function fetchCoingeckoPrices(
   ids: string[],
   vsCurrency: string,
 ): Promise<Record<string, number>> {
@@ -52,9 +53,11 @@ async function fetchEquityPrice(
 
 /**
  * Attempts to refresh live prices for every holding that has a lookupSymbol.
- * Crypto goes through CoinGecko (reliable, CORS-open). Equities/other go through
- * a best-effort Yahoo lookup that may simply fail. Precious metals and cash/savings
- * have no free no-key live source and are always left for manual entry.
+ * Crypto AND precious metals both go through CoinGecko (reliable, CORS-open) — gold's
+ * lookup id is a tokenized-gold coin (e.g. "pax-gold", pegged ~1:1 to a troy ounce of
+ * gold) since CoinGecko doesn't distinguish "coin id" from "commodity id"; the fetch
+ * itself is identical either way. Equities/other go through a best-effort Yahoo lookup
+ * that may simply fail. Cash/savings has no live source and is always manual entry.
  */
 export async function refreshLivePrices(
   holdings: Holding[],
@@ -62,19 +65,21 @@ export async function refreshLivePrices(
   const result: PriceRefreshResult = { updated: [], skipped: [], failed: [] };
   const now = new Date().toISOString();
 
-  const cryptoHoldings = holdings.filter((h) => h.entryMode === "quantity" && h.assetClass === "crypto" && h.lookupSymbol);
-  const cryptoByVsCurrency = new Map<string, Holding[]>();
-  for (const h of cryptoHoldings) {
+  const coingeckoHoldings = holdings.filter(
+    (h) => h.entryMode === "quantity" && (h.assetClass === "crypto" || h.assetClass === "precious_metal") && h.lookupSymbol,
+  );
+  const coingeckoByVsCurrency = new Map<string, Holding[]>();
+  for (const h of coingeckoHoldings) {
     const vs = h.currency.toLowerCase();
-    if (!cryptoByVsCurrency.has(vs)) cryptoByVsCurrency.set(vs, []);
-    cryptoByVsCurrency.get(vs)!.push(h);
+    if (!coingeckoByVsCurrency.has(vs)) coingeckoByVsCurrency.set(vs, []);
+    coingeckoByVsCurrency.get(vs)!.push(h);
   }
 
   const priceById = new Map<string, number>(); // holding id -> new price
-  for (const [vs, group] of cryptoByVsCurrency) {
+  for (const [vs, group] of coingeckoByVsCurrency) {
     const ids = group.map((h) => h.lookupSymbol!).filter(Boolean);
     try {
-      const prices = await fetchCryptoPrices(ids, vs);
+      const prices = await fetchCoingeckoPrices(ids, vs);
       for (const h of group) {
         const price = prices[h.lookupSymbol!];
         if (typeof price === "number") {
