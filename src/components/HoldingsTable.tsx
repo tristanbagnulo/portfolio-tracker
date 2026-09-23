@@ -16,10 +16,12 @@ export function HoldingsTable({
   holdings,
   onEdit,
   onDelete,
+  revealed,
 }: {
   holdings: Holding[];
   onEdit: (holding: Holding) => void;
   onDelete: (id: string) => void;
+  revealed: boolean;
 }) {
   if (holdings.length === 0) {
     return <div className="empty-state">No holdings yet — add your first one below.</div>;
@@ -52,8 +54,8 @@ export function HoldingsTable({
                   <div>{ASSET_CLASS_LABELS[h.assetClass]}</div>
                   <div style={{ fontSize: 11, color: "var(--text-muted)" }}>{TAX_TREATMENT_LABELS[h.taxTreatment]}</div>
                 </td>
-                <td>{amountLabel(h)}</td>
-                <td className="num">{formatMoney(h.value, h.currency)}</td>
+                <td>{revealed ? amountLabel(h) : "••••"}</td>
+                <td className="num">{revealed ? formatMoney(h.value, h.currency) : "••••"}</td>
                 <td>
                   {h.priceSource === "live" && <span className="pill live">Live</span>}
                   <div style={{ fontSize: 11, color: stale ? "var(--critical)" : "var(--text-muted)" }}>

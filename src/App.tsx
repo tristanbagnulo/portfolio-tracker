@@ -36,6 +36,10 @@ export default function App() {
   const [modalTransfer, setModalTransfer] = useState<Transfer | "new" | null>(null);
   const [editingFxCurrency, setEditingFxCurrency] = useState<string | null>(null);
   const [tab, setTab] = useState<Tab>("holdings");
+  // Hidden by default on every load/reload — a privacy toggle, not a saved preference,
+  // so a glance at the screen (or someone else picking up the phone) doesn't show the
+  // total by default. Deliberately in-memory only, not persisted.
+  const [wealthRevealed, setWealthRevealed] = useState(false);
 
   const { baseCurrency, fxRates } = state.settings;
 
@@ -146,11 +150,23 @@ export default function App() {
             totalNow={current.totalBase}
             monthlyContribution={monthlyRate}
             holdingsCount={state.holdings.length}
+            wealthRevealed={wealthRevealed}
+            onToggleWealth={() => setWealthRevealed((v) => !v)}
           />
 
           <div className="card">
-            <h2>Allocation</h2>
-            <AllocationChart byAssetClass={current.byAssetClass} total={current.totalBase} baseCurrency={baseCurrency} />
+            <div className="toolbar" style={{ justifyContent: "space-between", marginBottom: 4 }}>
+              <h2 style={{ margin: 0 }}>Allocation</h2>
+              <button type="button" className="link-btn" onClick={() => setWealthRevealed((v) => !v)}>
+                {wealthRevealed ? "Hide amounts" : "Show amounts"}
+              </button>
+            </div>
+            <AllocationChart
+              byAssetClass={current.byAssetClass}
+              total={current.totalBase}
+              baseCurrency={baseCurrency}
+              revealed={wealthRevealed}
+            />
           </div>
 
           {(() => {
@@ -181,7 +197,12 @@ export default function App() {
 
           <div className="card">
             <h2>Holdings</h2>
-            <HoldingsTable holdings={state.holdings} onEdit={setModalHolding} onDelete={deleteHolding} />
+            <HoldingsTable
+              holdings={state.holdings}
+              onEdit={setModalHolding}
+              onDelete={deleteHolding}
+              revealed={wealthRevealed}
+            />
           </div>
 
           <TransfersList

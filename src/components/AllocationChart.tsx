@@ -8,10 +8,12 @@ export function AllocationChart({
   byAssetClass,
   total,
   baseCurrency,
+  revealed,
 }: {
   byAssetClass: Record<AssetClass, number>;
   total: number;
   baseCurrency: string;
+  revealed: boolean;
 }) {
   const rows = ORDER.map((cls) => ({ cls, value: byAssetClass[cls] })).filter((r) => r.value > 0);
 
@@ -33,7 +35,8 @@ export function AllocationChart({
               />
             </div>
             <span>
-              {formatMoney(r.value, baseCurrency)} <span style={{ color: "var(--text-muted)" }}>({pct.toFixed(0)}%)</span>
+              {revealed ? formatMoney(r.value, baseCurrency) : "••••"}{" "}
+              <span style={{ color: "var(--text-muted)" }}>({pct.toFixed(0)}%)</span>
             </span>
           </div>
         );
