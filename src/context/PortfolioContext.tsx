@@ -1,6 +1,6 @@
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import { Holding, PortfolioSettings, PortfolioState, Transfer } from "../types";
-import { loadState, saveState, exportStateAsFile, parseImportedState } from "../lib/storage";
+import { loadState, saveState, exportStateAsFile, parseImportedState, sanitizeState } from "../lib/storage";
 import { fetchFxRates } from "../lib/fx";
 import { refreshLivePrices, PriceRefreshResult } from "../lib/prices";
 import { newId } from "../lib/id";
@@ -123,10 +123,17 @@ export function PortfolioProvider({ children }: { children: React.ReactNode }) {
       if (cancelled) return;
       cloudReadyRef.current = true;
       unsubscribe = cloudSync.subscribeCloudState(uid, (cloudState) => {
-        const json = JSON.stringify(cloudState);
+        // Sanitize exactly like every other entry point (local load, file import) —
+        // an older cloud copy (another device, or this account before a field like
+        // taxTreatment existed) is otherwise adopted as-is, which is how a holding
+        // missing taxTreatment previously poisoned every projection with NaN. If the
+        // cloud copy needed fixing up, this naturally differs from what's "in sync" and
+        // the write-through effect below pushes the fixed version straight back.
+        const sanitized = sanitizeState(cloudState);
+        const json = JSON.stringify(sanitized);
         if (json === lastSyncedJsonRef.current) return;
         lastSyncedJsonRef.current = json;
-        setState(cloudState);
+        setState(sanitized);
         setLoadIssue(null); // a good cloud copy resolves any local load issue
       });
     })();

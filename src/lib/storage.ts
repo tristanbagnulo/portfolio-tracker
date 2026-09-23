@@ -1,10 +1,30 @@
 import { defaultState, defaultTaxTreatmentForClass, Holding, PortfolioState } from "../types";
 
-// A holding saved before tax treatment existed has no `taxTreatment` at all — without
-// this, the projection's tax math (lib/tax.ts) would hit an unhandled case and produce
-// NaN for every pre-existing holding the moment someone sets a tax rate.
-function migrateHoldings(holdings: Holding[]): Holding[] {
-  return holdings.map((h) => (h.taxTreatment ? h : { ...h, taxTreatment: defaultTaxTreatmentForClass(h.assetClass) }));
+// Every path data can enter this app through (local load, file import, and the
+// Firestore cloud subscription in context/PortfolioContext.tsx) needs the SAME
+// backward-compatible defaults applied — a state object missing a field a newer version
+// of the app now depends on is exactly as "old" whether it came from disk, a backup
+// file, or another device's earlier cloud copy. Splitting this migration across each
+// call site separately is how a real bug happened: the cloud path got missed when
+// taxTreatment was added, and a holding with no taxTreatment silently poisoned every
+// projection with NaN (lib/tax.ts's switch had no case for `undefined`). One function,
+// called from every entry point, is the fix.
+export function sanitizeState(parsed: {
+  holdings?: unknown;
+  transfers?: unknown;
+  settings?: Partial<PortfolioState["settings"]>;
+}): PortfolioState {
+  const d = defaultState();
+  const holdings: Holding[] = Array.isArray(parsed.holdings) ? parsed.holdings : [];
+  const settings = { ...d.settings, ...parsed.settings };
+  if (!settings.scenarios?.length) settings.scenarios = d.settings.scenarios;
+  if (!settings.visibleScenarioIds?.length) settings.visibleScenarioIds = settings.scenarios.map((s) => s.id);
+  if (typeof settings.marginalTaxRatePct !== "number") settings.marginalTaxRatePct = 0;
+  return {
+    holdings: holdings.map((h) => (h.taxTreatment ? h : { ...h, taxTreatment: defaultTaxTreatmentForClass(h.assetClass) })),
+    transfers: Array.isArray(parsed.transfers) ? parsed.transfers : [],
+    settings,
+  };
 }
 
 const STORAGE_KEY = "portfolio-tracker:state:v2";
@@ -28,17 +48,9 @@ export interface LoadResult {
 function tryParse(raw: string | null): PortfolioState | null {
   if (!raw) return null;
   try {
-    const parsed = JSON.parse(raw) as PortfolioState;
+    const parsed = JSON.parse(raw) as Partial<PortfolioState>;
     if (!Array.isArray(parsed.holdings)) return null;
-    const d = defaultState();
-    const settings = { ...d.settings, ...parsed.settings };
-    if (!settings.scenarios?.length) settings.scenarios = d.settings.scenarios;
-    if (!settings.visibleScenarioIds?.length) settings.visibleScenarioIds = settings.scenarios.map((s) => s.id);
-    return {
-      holdings: migrateHoldings(parsed.holdings),
-      transfers: Array.isArray(parsed.transfers) ? parsed.transfers : [],
-      settings,
-    };
+    return sanitizeState(parsed);
   } catch {
     return null;
   }
@@ -86,17 +98,9 @@ export function exportStateAsFile(state: PortfolioState): void {
 }
 
 export function parseImportedState(text: string): PortfolioState {
-  const parsed = JSON.parse(text) as PortfolioState;
+  const parsed = JSON.parse(text) as Partial<PortfolioState>;
   if (!Array.isArray(parsed.holdings) || typeof parsed.settings !== "object") {
     throw new Error("File doesn't look like a portfolio-tracker backup.");
   }
-  const d = defaultState();
-  if (!parsed.settings.scenarios?.length) {
-    parsed.settings.scenarios = d.settings.scenarios;
-    parsed.settings.visibleScenarioIds = d.settings.visibleScenarioIds;
-  }
-  if (!Array.isArray(parsed.transfers)) parsed.transfers = [];
-  if (typeof parsed.settings.marginalTaxRatePct !== "number") parsed.settings.marginalTaxRatePct = 0;
-  parsed.holdings = migrateHoldings(parsed.holdings);
-  return parsed;
+  return sanitizeState(parsed);
 }
