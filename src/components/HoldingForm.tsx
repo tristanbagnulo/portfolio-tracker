@@ -68,6 +68,29 @@ function guessCoingeckoId(name: string): string | null {
   return COMMON_COINGECKO_IDS[name.trim().toLowerCase()] ?? null;
 }
 
+// The common case — Bitcoin, Ethereum, gold — shouldn't need a name field, an asset
+// class picker, a currency picker, and a manual price: pick the asset, type a quantity,
+// done. Everything else here (stocks, cash accounts, anything not in this short list)
+// still uses the full form below — this is a shortcut for the common case, not a
+// replacement for it.
+interface QuickAsset {
+  key: string;
+  label: string;
+  assetClass: AssetClass;
+  lookupSymbol: string;
+  currency: string; // how this asset is conventionally quoted
+}
+const QUICK_ASSETS: QuickAsset[] = [
+  { key: "bitcoin", label: "Bitcoin", assetClass: "crypto", lookupSymbol: "bitcoin", currency: "USD" },
+  { key: "ethereum", label: "Ethereum", assetClass: "crypto", lookupSymbol: "ethereum", currency: "USD" },
+  { key: "gold", label: "Gold", assetClass: "precious_metal", lookupSymbol: "pax-gold", currency: "USD" },
+];
+
+function matchingQuickAsset(h: Draft | null): QuickAsset | null {
+  if (!h || h.entryMode !== "quantity") return null;
+  return QUICK_ASSETS.find((q) => q.lookupSymbol === h.lookupSymbol && q.assetClass === h.assetClass) ?? null;
+}
+
 // A controlled number input showing a literal 0 isn't a placeholder — it's real text
 // sitting in the field, so typing "5" lands next to it ("05") instead of replacing it.
 // Showing an empty string instead lets typing start clean; the onChange handlers below
@@ -111,9 +134,24 @@ export function HoldingForm({
   onClose: () => void;
 }) {
   const [draft, setDraft] = useState<Draft>(() => initial ?? blankHolding(baseCurrency));
+  const [quickAsset, setQuickAsset] = useState<QuickAsset | null>(() => matchingQuickAsset(initial));
 
   function set<K extends keyof Holding>(key: K, value: Holding[K]) {
     setDraft((d) => ({ ...d, [key]: value }));
+  }
+
+  function pickQuickAsset(q: QuickAsset) {
+    setQuickAsset(q);
+    setDraft((d) => ({
+      ...d,
+      name: q.label,
+      assetClass: q.assetClass,
+      entryMode: "quantity",
+      lookupSymbol: q.lookupSymbol,
+      currency: q.currency,
+      taxTreatment: initial && initial.assetClass === q.assetClass ? d.taxTreatment : defaultTaxTreatmentForClass(q.assetClass),
+      quantity: initial && matchingQuickAsset(initial)?.key === q.key ? d.quantity : 0,
+    }));
   }
 
   // Auto-fills the live lookup symbol for a recognizable coin/metal name once the
@@ -202,165 +240,244 @@ export function HoldingForm({
       <form className="modal" onSubmit={submit}>
         <h2>{initial ? "Edit holding" : "Add holding"}</h2>
 
-        <div className="form-grid">
-          <div className="form-field span-2">
-            <label>Asset</label>
-            <input
-              required
-              value={draft.name}
-              onChange={(e) => setName(e.target.value)}
-              placeholder="e.g. Bitcoin, VAS, ING Savings Maximiser"
-            />
-          </div>
-
-          <div className="form-field span-2">
-            <label>Asset class</label>
-            <select value={draft.assetClass} onChange={(e) => setAssetClass(e.target.value as AssetClass)}>
-              {(Object.keys(ASSET_CLASS_LABELS) as AssetClass[]).map((cls) => (
-                <option key={cls} value={cls}>
-                  {ASSET_CLASS_LABELS[cls]}
-                </option>
-              ))}
-            </select>
-          </div>
-
-          <div className="form-field span-2">
-            <label>Tax treatment</label>
-            <select value={draft.taxTreatment} onChange={(e) => setTaxTreatment(e.target.value as TaxTreatment)}>
-              {(Object.keys(TAX_TREATMENT_LABELS) as TaxTreatment[]).map((t) => (
-                <option key={t} value={t}>
-                  {TAX_TREATMENT_LABELS[t]}
-                </option>
-              ))}
-            </select>
-            <span className="help">
-              How this holding's projected growth is taxed — never applied to contributions, that's already your
-              post-tax money. Set your rate in Settings. Not tax advice — check anything unusual (like an informal
-              family arrangement) with an accountant.
-            </span>
-          </div>
-
-          <div className="form-field span-2">
-            <label>How do you want to enter it?</label>
-            <div className="seg-toggle">
+        <div className="form-field span-2" style={{ marginBottom: 14 }}>
+          <label>Quick add</label>
+          <div className="chips">
+            {QUICK_ASSETS.map((q) => (
               <button
+                key={q.key}
                 type="button"
-                className={draft.entryMode === "value" ? "active" : ""}
-                onClick={() => setEntryMode("value")}
+                className={`chip${quickAsset?.key === q.key ? " active" : ""}`}
+                onClick={() => pickQuickAsset(q)}
               >
-                By value
+                {q.label}
               </button>
-              <button
-                type="button"
-                className={draft.entryMode === "quantity" ? "active" : ""}
-                onClick={() => setEntryMode("quantity")}
-              >
-                By quantity
-              </button>
-            </div>
-            <span className="help">
-              {draft.entryMode === "value"
-                ? "You type the current value yourself — simplest, but there's nothing to auto-lookup since no unit price is involved."
-                : "For crypto with a recognized name, the live price fills in automatically after saving — you only need the quantity."}
-            </span>
+            ))}
           </div>
+          <span className="help">
+            Pick one and you'll only need to enter a quantity — price and value update automatically. Anything
+            else (stocks, cash accounts, ...) uses the full form below.
+          </span>
+        </div>
 
-          {draft.entryMode === "value" ? (
-            <>
-              <div className="form-field">
-                <label>Current value</label>
-                <input
-                  type="number"
-                  step="any"
-                  value={emptyIfZero(draft.value)}
-                  onChange={(e) => set("value", Number(e.target.value))}
-                />
-              </div>
-              <div className="form-field">
-                <label>Currency</label>
-                <select value={draft.currency} onChange={(e) => set("currency", e.target.value)}>
-                  {CURRENCIES.map((c) => (
-                    <option key={c.code} value={c.code}>
-                      {c.code}
-                    </option>
-                  ))}
-                </select>
-              </div>
-            </>
-          ) : (
-            <>
-              <div className="form-field">
-                <label>Quantity</label>
-                <input
-                  type="number"
-                  step="any"
-                  value={emptyIfZero(draft.quantity)}
-                  onChange={(e) => set("quantity", Number(e.target.value))}
-                />
-              </div>
-              <div className="form-field">
-                <label>Price per unit</label>
-                <input
-                  type="number"
-                  step="any"
-                  value={emptyIfZero(draft.price)}
-                  onChange={(e) => set("price", Number(e.target.value))}
-                />
-              </div>
-              <div className="form-field span-2">
-                <label>Currency</label>
-                <select value={draft.currency} onChange={(e) => set("currency", e.target.value)}>
-                  {CURRENCIES.map((c) => (
-                    <option key={c.code} value={c.code}>
-                      {c.code}
-                    </option>
-                  ))}
-                </select>
-              </div>
-              {quantityValuePreview && <div className="form-field span-2 help">= {quantityValuePreview}</div>}
-            </>
-          )}
-
-          {convertedPreview != null && (
-            <div className="form-field span-2 help">
-              ≈ {formatMoney(convertedPreview, baseCurrency)}
-            </div>
-          )}
-          {draft.currency !== baseCurrency && convertedPreview == null && (
-            <div className="form-field span-2 help">
-              No exchange rate set for {draft.currency} yet — one will be fetched automatically, or add one manually.
-            </div>
-          )}
-
-          {canFetchLive && (
+        {quickAsset ? (
+          <div className="form-grid">
             <div className="form-field span-2">
-              <label>Live lookup symbol (optional)</label>
-              <input
-                value={draft.lookupSymbol ?? ""}
-                onChange={(e) => set("lookupSymbol", e.target.value)}
-                placeholder={
-                  draft.assetClass === "crypto"
-                    ? "CoinGecko id, e.g. bitcoin"
-                    : draft.assetClass === "precious_metal"
-                      ? "pax-gold for gold — leave blank for silver etc."
-                      : "Ticker, e.g. VAS.AX or AAPL"
-                }
-              />
+              <div className="sr-top">
+                <span className="name">{quickAsset.label}</span>
+                <button type="button" className="link-btn" onClick={() => setQuickAsset(null)}>
+                  Not this — enter manually
+                </button>
+              </div>
               <span className="help">
-                {draft.assetClass === "crypto"
-                  ? "Reliable — fetched from CoinGecko's free public API, refreshed automatically."
-                  : draft.assetClass === "precious_metal"
-                    ? "Gold only, via PAX Gold (PAXG) — a token pegged 1:1 to a troy ounce, so it can carry a small premium or discount vs spot. Other metals have no free live source; leave blank and update manually."
-                    : "Best-effort — an unauthenticated lookup that can fail; value will stay manual if it does."}
+                Live price fetched from CoinGecko automatically after saving, refreshed every 5 minutes — you don't
+                need to enter one.
               </span>
             </div>
-          )}
 
-          <div className="form-field span-2">
-            <label>Notes (optional)</label>
-            <input value={draft.notes ?? ""} onChange={(e) => set("notes", e.target.value)} />
+            <div className="form-field">
+              <label>Quantity</label>
+              <input
+                type="number"
+                step="any"
+                autoFocus
+                value={emptyIfZero(draft.quantity)}
+                onChange={(e) => set("quantity", Number(e.target.value))}
+                placeholder={quickAsset.key === "gold" ? "troy ounces" : "e.g. 0.5"}
+              />
+            </div>
+            <div className="form-field">
+              <label>Currency</label>
+              <select value={draft.currency} onChange={(e) => set("currency", e.target.value)}>
+                {CURRENCIES.map((c) => (
+                  <option key={c.code} value={c.code}>
+                    {c.code}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            {convertedPreview != null && (
+              <div className="form-field span-2 help">≈ {formatMoney(convertedPreview, baseCurrency)}</div>
+            )}
+
+            <div className="form-field span-2">
+              <label>Tax treatment</label>
+              <select value={draft.taxTreatment} onChange={(e) => setTaxTreatment(e.target.value as TaxTreatment)}>
+                {(Object.keys(TAX_TREATMENT_LABELS) as TaxTreatment[]).map((t) => (
+                  <option key={t} value={t}>
+                    {TAX_TREATMENT_LABELS[t]}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div className="form-field span-2">
+              <label>Notes (optional)</label>
+              <input value={draft.notes ?? ""} onChange={(e) => set("notes", e.target.value)} />
+            </div>
           </div>
-        </div>
+        ) : (
+          <div className="form-grid">
+            <div className="form-field span-2">
+              <label>Asset</label>
+              <input
+                required
+                value={draft.name}
+                onChange={(e) => setName(e.target.value)}
+                placeholder="e.g. Bitcoin, VAS, ING Savings Maximiser"
+              />
+            </div>
+
+            <div className="form-field span-2">
+              <label>Asset class</label>
+              <select value={draft.assetClass} onChange={(e) => setAssetClass(e.target.value as AssetClass)}>
+                {(Object.keys(ASSET_CLASS_LABELS) as AssetClass[]).map((cls) => (
+                  <option key={cls} value={cls}>
+                    {ASSET_CLASS_LABELS[cls]}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div className="form-field span-2">
+              <label>Tax treatment</label>
+              <select value={draft.taxTreatment} onChange={(e) => setTaxTreatment(e.target.value as TaxTreatment)}>
+                {(Object.keys(TAX_TREATMENT_LABELS) as TaxTreatment[]).map((t) => (
+                  <option key={t} value={t}>
+                    {TAX_TREATMENT_LABELS[t]}
+                  </option>
+                ))}
+              </select>
+              <span className="help">
+                How this holding's projected growth is taxed — never applied to contributions, that's already your
+                post-tax money. Set your rate in Settings. Not tax advice — check anything unusual (like an informal
+                family arrangement) with an accountant.
+              </span>
+            </div>
+
+            <div className="form-field span-2">
+              <label>How do you want to enter it?</label>
+              <div className="seg-toggle">
+                <button
+                  type="button"
+                  className={draft.entryMode === "value" ? "active" : ""}
+                  onClick={() => setEntryMode("value")}
+                >
+                  By value
+                </button>
+                <button
+                  type="button"
+                  className={draft.entryMode === "quantity" ? "active" : ""}
+                  onClick={() => setEntryMode("quantity")}
+                >
+                  By quantity
+                </button>
+              </div>
+              <span className="help">
+                {draft.entryMode === "value"
+                  ? "You type the current value yourself — simplest, but there's nothing to auto-lookup since no unit price is involved."
+                  : "For crypto with a recognized name, the live price fills in automatically after saving — you only need the quantity."}
+              </span>
+            </div>
+
+            {draft.entryMode === "value" ? (
+              <>
+                <div className="form-field">
+                  <label>Current value</label>
+                  <input
+                    type="number"
+                    step="any"
+                    value={emptyIfZero(draft.value)}
+                    onChange={(e) => set("value", Number(e.target.value))}
+                  />
+                </div>
+                <div className="form-field">
+                  <label>Currency</label>
+                  <select value={draft.currency} onChange={(e) => set("currency", e.target.value)}>
+                    {CURRENCIES.map((c) => (
+                      <option key={c.code} value={c.code}>
+                        {c.code}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </>
+            ) : (
+              <>
+                <div className="form-field">
+                  <label>Quantity</label>
+                  <input
+                    type="number"
+                    step="any"
+                    value={emptyIfZero(draft.quantity)}
+                    onChange={(e) => set("quantity", Number(e.target.value))}
+                  />
+                </div>
+                <div className="form-field">
+                  <label>Price per unit</label>
+                  <input
+                    type="number"
+                    step="any"
+                    value={emptyIfZero(draft.price)}
+                    onChange={(e) => set("price", Number(e.target.value))}
+                  />
+                </div>
+                <div className="form-field span-2">
+                  <label>Currency</label>
+                  <select value={draft.currency} onChange={(e) => set("currency", e.target.value)}>
+                    {CURRENCIES.map((c) => (
+                      <option key={c.code} value={c.code}>
+                        {c.code}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                {quantityValuePreview && <div className="form-field span-2 help">= {quantityValuePreview}</div>}
+              </>
+            )}
+
+            {convertedPreview != null && (
+              <div className="form-field span-2 help">
+                ≈ {formatMoney(convertedPreview, baseCurrency)}
+              </div>
+            )}
+            {draft.currency !== baseCurrency && convertedPreview == null && (
+              <div className="form-field span-2 help">
+                No exchange rate set for {draft.currency} yet — one will be fetched automatically, or add one manually.
+              </div>
+            )}
+
+            {canFetchLive && (
+              <div className="form-field span-2">
+                <label>Live lookup symbol (optional)</label>
+                <input
+                  value={draft.lookupSymbol ?? ""}
+                  onChange={(e) => set("lookupSymbol", e.target.value)}
+                  placeholder={
+                    draft.assetClass === "crypto"
+                      ? "CoinGecko id, e.g. bitcoin"
+                      : draft.assetClass === "precious_metal"
+                        ? "pax-gold for gold — leave blank for silver etc."
+                        : "Ticker, e.g. VAS.AX or AAPL"
+                  }
+                />
+                <span className="help">
+                  {draft.assetClass === "crypto"
+                    ? "Reliable — fetched from CoinGecko's free public API, refreshed automatically."
+                    : draft.assetClass === "precious_metal"
+                      ? "Gold only, via PAX Gold (PAXG) — a token pegged 1:1 to a troy ounce, so it can carry a small premium or discount vs spot. Other metals have no free live source; leave blank and update manually."
+                      : "Best-effort — an unauthenticated lookup that can fail; value will stay manual if it does."}
+                </span>
+              </div>
+            )}
+
+            <div className="form-field span-2">
+              <label>Notes (optional)</label>
+              <input value={draft.notes ?? ""} onChange={(e) => set("notes", e.target.value)} />
+            </div>
+          </div>
+        )}
 
         <h2 style={{ fontSize: 14, marginTop: 20 }}>Contributions</h2>
         <p className="help" style={{ marginTop: -6, marginBottom: 10 }}>
