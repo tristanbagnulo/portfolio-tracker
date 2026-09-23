@@ -1,4 +1,4 @@
-import { ASSET_CLASS_LABELS, Holding } from "../types";
+import { ASSET_CLASS_LABELS, Holding, TAX_TREATMENT_LABELS } from "../types";
 import { formatDate, formatMoney } from "../lib/format";
 
 function daysSince(iso: string): number {
@@ -48,7 +48,10 @@ export function HoldingsTable({
                   <div>{h.name}</div>
                   {h.notes && <div style={{ fontSize: 11, color: "var(--text-muted)" }}>{h.notes}</div>}
                 </td>
-                <td>{ASSET_CLASS_LABELS[h.assetClass]}</td>
+                <td>
+                  <div>{ASSET_CLASS_LABELS[h.assetClass]}</div>
+                  <div style={{ fontSize: 11, color: "var(--text-muted)" }}>{TAX_TREATMENT_LABELS[h.taxTreatment]}</div>
+                </td>
                 <td>{amountLabel(h)}</td>
                 <td className="num">{formatMoney(h.value, h.currency)}</td>
                 <td>

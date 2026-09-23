@@ -1,6 +1,7 @@
 import { AssetClass, Holding, Scenario, Transfer } from "../types";
 import { convert } from "./fx";
 import { amountForMonth, monthlyEquivalent, startOfMonth } from "./schedule";
+import { effectiveTaxRatePct } from "./tax";
 
 export interface ProjectionPoint {
   monthIndex: number; // 0 = today
@@ -52,7 +53,10 @@ const EMPTY_BY_CLASS = (): Record<AssetClass, number> => ({
  * at that scenario's rate for its asset class and receives its scheduled contributions,
  * converted to the base currency using the CURRENT fx snapshot held constant throughout —
  * a simplification (real exchange rates move), flagged in the UI. Compounding (monthly)
- * is always on; there's no "simple growth" mode.
+ * is always on; there's no "simple growth" mode. `marginalTaxRatePct` (0 = untaxed,
+ * today's default) is applied to each month's GROWTH only — never to contributions,
+ * that's already post-tax money — at a rate scaled per holding by its tax treatment;
+ * see lib/tax.ts.
  */
 export function projectScenario(
   holdings: Holding[],
@@ -61,6 +65,7 @@ export function projectScenario(
   baseCurrency: string,
   fxRates: Record<string, number>,
   horizonYears: number,
+  marginalTaxRatePct: number,
 ): { series: ProjectionPoint[]; milestones: Milestone[] } {
   const months = horizonYears * 12;
   const today = startOfMonth(new Date());
@@ -89,10 +94,12 @@ export function projectScenario(
     if (m > 0) {
       for (const h of usable) {
         const ratePct = scenario.rates[h.assetClass] ?? 0;
-        const rate = Math.pow(1 + ratePct / 100, 1 / 12) - 1;
+        const grossRate = Math.pow(1 + ratePct / 100, 1 / 12) - 1;
         const prev = nativeValues.get(h.id)!;
+        const taxRatePct = effectiveTaxRatePct(h.taxTreatment, marginalTaxRatePct);
+        const afterTaxGrowth = prev * grossRate * (1 - taxRatePct / 100);
         const contribution = monthlyContributionFor(h, monthDate);
-        nativeValues.set(h.id, prev * (1 + rate) + contribution);
+        nativeValues.set(h.id, prev + afterTaxGrowth + contribution);
         contributedBase += convert(contribution, h.currency, baseCurrency, fxRates) ?? 0;
       }
 
@@ -134,10 +141,11 @@ export function projectScenarios(
   baseCurrency: string,
   fxRates: Record<string, number>,
   horizonYears: number,
+  marginalTaxRatePct: number,
 ): ScenarioProjection[] {
   return scenarios.map((scenario) => ({
     scenario,
-    ...projectScenario(holdings, transfers, scenario, baseCurrency, fxRates, horizonYears),
+    ...projectScenario(holdings, transfers, scenario, baseCurrency, fxRates, horizonYears, marginalTaxRatePct),
   }));
 }
 

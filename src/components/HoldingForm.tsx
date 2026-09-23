@@ -5,9 +5,12 @@ import {
   CURRENCIES,
   ContributionFrequency,
   ContributionSchedule,
+  defaultTaxTreatmentForClass,
   EntryMode,
   FREQUENCY_LABELS,
   Holding,
+  TAX_TREATMENT_LABELS,
+  TaxTreatment,
 } from "../types";
 import { newId } from "../lib/id";
 import { convert } from "../lib/fx";
@@ -79,6 +82,7 @@ function blankHolding(baseCurrency: string): Draft {
     value: 0,
     valueUpdatedAt: new Date().toISOString(),
     contributions: [],
+    taxTreatment: defaultTaxTreatmentForClass("equity"),
     notes: "",
   };
 }
@@ -121,12 +125,17 @@ export function HoldingForm({
       ...d,
       assetClass: cls,
       entryMode: initial ? d.entryMode : defaultModeForClass(cls),
+      taxTreatment: initial ? d.taxTreatment : defaultTaxTreatmentForClass(cls),
       lookupSymbol: suggestSymbol(d.name, cls, d.lookupSymbol),
     }));
   }
 
   function setEntryMode(mode: EntryMode) {
     setDraft((d) => ({ ...d, entryMode: mode }));
+  }
+
+  function setTaxTreatment(treatment: TaxTreatment) {
+    setDraft((d) => ({ ...d, taxTreatment: treatment }));
   }
 
   function addContribution() {
@@ -201,6 +210,22 @@ export function HoldingForm({
                 </option>
               ))}
             </select>
+          </div>
+
+          <div className="form-field span-2">
+            <label>Tax treatment</label>
+            <select value={draft.taxTreatment} onChange={(e) => setTaxTreatment(e.target.value as TaxTreatment)}>
+              {(Object.keys(TAX_TREATMENT_LABELS) as TaxTreatment[]).map((t) => (
+                <option key={t} value={t}>
+                  {TAX_TREATMENT_LABELS[t]}
+                </option>
+              ))}
+            </select>
+            <span className="help">
+              How this holding's projected growth is taxed — never applied to contributions, that's already your
+              post-tax money. Set your rate in Settings. Not tax advice — check anything unusual (like an informal
+              family arrangement) with an accountant.
+            </span>
           </div>
 
           <div className="form-field span-2">

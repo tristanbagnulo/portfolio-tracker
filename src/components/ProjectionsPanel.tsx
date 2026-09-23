@@ -26,9 +26,9 @@ export function ProjectionsPanel({
   const [managing, setManaging] = useState(false);
   const [breakdownScenarioId, setBreakdownScenarioId] = useState<string | null>(null);
 
-  const { baseCurrency, fxRates, scenarios, visibleScenarioIds, projectionHorizonYears: horizon } = settings;
+  const { baseCurrency, fxRates, scenarios, visibleScenarioIds, projectionHorizonYears: horizon, marginalTaxRatePct } = settings;
   const visibleScenarios = scenarios.filter((s) => visibleScenarioIds.includes(s.id));
-  const results = projectScenarios(holdings, transfers, visibleScenarios, baseCurrency, fxRates, horizon);
+  const results = projectScenarios(holdings, transfers, visibleScenarios, baseCurrency, fxRates, horizon, marginalTaxRatePct);
 
   const breakdownIndex = Math.max(
     0,
@@ -127,6 +127,7 @@ export function ProjectionsPanel({
         <p className="help" style={{ marginTop: -6, marginBottom: 12 }}>
           Every holding compounds monthly at its scenario's rate for its asset class, plus your scheduled contributions and
           transfers between holdings. Exchange rates are held at today's values for the whole projection.
+          {marginalTaxRatePct > 0 && " Growth shown is after tax, per each holding's tax treatment — set in Settings."}
         </p>
         <ProjectionChart results={results} baseCurrency={baseCurrency} horizonYears={horizon} />
       </section>
@@ -151,7 +152,7 @@ export function ProjectionsPanel({
           </div>
           <p className="help" style={{ marginTop: -6, marginBottom: 12 }}>
             How much of {breakdownResult.scenario.name}'s projected total is money you put in versus what compounding
-            actually earned.
+            actually earned{marginalTaxRatePct > 0 ? ", after tax" : ""}.
           </p>
           {(() => {
             const last = breakdownResult.series[breakdownResult.series.length - 1];

@@ -63,6 +63,30 @@ export interface ContributionSchedule {
 export type EntryMode = "value" | "quantity";
 export type PriceSource = "manual" | "live";
 
+// How this holding's GROWTH (never contributions — that's already your post-tax money
+// going in) gets taxed in the projection. Deliberately simple labels, not a full ATO
+// simulator — see lib/tax.ts for the one approximation this makes (a flat, continuous
+// CGT-discount rate rather than modeling tax as a lump sum deferred until you actually
+// sell). You choose the treatment per holding because it genuinely varies: bank
+// interest is ordinary income, an ATO-recognized capital asset gets the CGT discount,
+// and something like an informal family arrangement might be tax-free — or might not;
+// that's a real question worth checking with an accountant, not something this app
+// decides for you.
+export type TaxTreatment = "tax_free" | "income" | "capital_gains";
+
+export const TAX_TREATMENT_LABELS: Record<TaxTreatment, string> = {
+  tax_free: "Tax-free",
+  income: "Taxed as income",
+  capital_gains: "Taxed as capital gain",
+};
+
+// Just a starting guess so a new holding isn't left on some arbitrary default — cash
+// interest is taxed as ordinary income; everything else here is the kind of asset
+// that's normally a CGT event on sale. Always editable per holding.
+export function defaultTaxTreatmentForClass(cls: AssetClass): TaxTreatment {
+  return cls === "cash_savings" ? "income" : "capital_gains";
+}
+
 export interface Holding {
   id: string;
   name: string; // e.g. "Bitcoin", "VAS - Vanguard Australian Shares", "ING Savings Maximiser"
@@ -79,6 +103,7 @@ export interface Holding {
   value: number; // canonical current value in `currency` (quantity * price when in that mode)
   valueUpdatedAt: string; // ISO datetime
   contributions: ContributionSchedule[];
+  taxTreatment: TaxTreatment;
   notes?: string;
 }
 
@@ -118,6 +143,12 @@ export interface PortfolioSettings {
   scenarios: Scenario[];
   visibleScenarioIds: string[];
   autoRefresh: boolean;
+  /** Your marginal income tax rate, as a percentage — e.g. include the 2% Medicare
+   * levy, exclude HECS/HELP repayments (that's a loan repayment, not a tax rate).
+   * You set this yourself; 0 means untaxed projections (today's default, unchanged
+   * behavior for anyone who hasn't touched it). Applied only to each holding's
+   * projected GROWTH, per its own tax treatment — see types.ts's TaxTreatment. */
+  marginalTaxRatePct: number;
 }
 
 export interface PortfolioState {
@@ -142,6 +173,7 @@ export function defaultState(): PortfolioState {
       scenarios: [base],
       visibleScenarioIds: [base.id],
       autoRefresh: true,
+      marginalTaxRatePct: 0,
     },
   };
 }

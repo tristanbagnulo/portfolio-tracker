@@ -1,4 +1,11 @@
-import { defaultState, PortfolioState } from "../types";
+import { defaultState, defaultTaxTreatmentForClass, Holding, PortfolioState } from "../types";
+
+// A holding saved before tax treatment existed has no `taxTreatment` at all — without
+// this, the projection's tax math (lib/tax.ts) would hit an unhandled case and produce
+// NaN for every pre-existing holding the moment someone sets a tax rate.
+function migrateHoldings(holdings: Holding[]): Holding[] {
+  return holdings.map((h) => (h.taxTreatment ? h : { ...h, taxTreatment: defaultTaxTreatmentForClass(h.assetClass) }));
+}
 
 const STORAGE_KEY = "portfolio-tracker:state:v2";
 // One generation of history behind the primary key, rolled forward on every successful
@@ -28,7 +35,7 @@ function tryParse(raw: string | null): PortfolioState | null {
     if (!settings.scenarios?.length) settings.scenarios = d.settings.scenarios;
     if (!settings.visibleScenarioIds?.length) settings.visibleScenarioIds = settings.scenarios.map((s) => s.id);
     return {
-      holdings: parsed.holdings,
+      holdings: migrateHoldings(parsed.holdings),
       transfers: Array.isArray(parsed.transfers) ? parsed.transfers : [],
       settings,
     };
@@ -89,5 +96,7 @@ export function parseImportedState(text: string): PortfolioState {
     parsed.settings.visibleScenarioIds = d.settings.visibleScenarioIds;
   }
   if (!Array.isArray(parsed.transfers)) parsed.transfers = [];
+  if (typeof parsed.settings.marginalTaxRatePct !== "number") parsed.settings.marginalTaxRatePct = 0;
+  parsed.holdings = migrateHoldings(parsed.holdings);
   return parsed;
 }

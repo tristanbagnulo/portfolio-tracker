@@ -55,6 +55,20 @@ export function SettingsBar() {
           <button onClick={() => refreshAll()} disabled={refreshing}>
             {refreshing ? "Refreshing…" : "Refresh now"}
           </button>
+          <div className="form-field" style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
+            <label style={{ marginBottom: 0 }}>Your tax rate</label>
+            <input
+              type="number"
+              step="any"
+              min={0}
+              max={100}
+              style={{ width: 64 }}
+              value={state.settings.marginalTaxRatePct || ""}
+              onChange={(e) => updateSettings({ marginalTaxRatePct: Number(e.target.value) })}
+              placeholder="0"
+            />
+            <span style={{ fontSize: 13, color: "var(--text-secondary)" }}>%</span>
+          </div>
           <label style={{ display: "flex", alignItems: "center", gap: 5, fontSize: 13 }}>
             <input
               type="checkbox"
@@ -73,6 +87,11 @@ export function SettingsBar() {
       <div style={{ fontSize: 11, color: "var(--text-muted)", marginTop: 8 }}>
         {lastRefreshedAt ? `Last refreshed ${formatDate(lastRefreshedAt)}.` : "Not refreshed yet — crypto prices and FX rates are fetched live; equities are best-effort."}{" "}
         {fxError && <span style={{ color: "var(--critical)" }}>FX refresh failed: {fxError}</span>}
+      </div>
+      <div style={{ fontSize: 11, color: "var(--text-muted)", marginTop: 4 }}>
+        Your marginal tax rate is used in Projections to show after-tax growth, per each holding's own tax treatment
+        (set on the holding itself). Include the Medicare levy; exclude HECS/HELP repayments — that's a loan, not a
+        tax rate. 0% means untaxed projections.
       </div>
       {lastPriceResult && lastPriceResult.failed.length > 0 && (
         <div style={{ fontSize: 11, color: "var(--text-muted)", marginTop: 4 }}>
