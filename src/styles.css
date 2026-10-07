@@ -11,12 +11,18 @@
   --success: #006300;
   --critical: #d03b3b;
 
-  /* categorical, fixed order — never reassign/cycle */
+  /* categorical, fixed order — never reassign/cycle. Slots 1-5 double as asset-class
+     identity (named above) AND as the first 5 slots of the 8-slot per-holding palette
+     (lib/colors.ts); slots 6-8 below exist only for per-holding identity, since a
+     portfolio can hold more individual assets than there are asset classes. */
   --series-equity: #2a78d6;
   --series-crypto: #eb6834;
   --series-metal: #1baf7a;
   --series-cash: #eda100;
   --series-other: #e87ba4;
+  --series-6: #008300;
+  --series-7: #4a3aa7;
+  --series-8: #e34948;
 }
 
 @media (prefers-color-scheme: dark) {
@@ -38,6 +44,9 @@
     --series-metal: #199e70;
     --series-cash: #c98500;
     --series-other: #d55181;
+    --series-6: #008300;
+    --series-7: #9085e9;
+    --series-8: #e66767;
   }
 }
 
@@ -59,6 +68,9 @@
   --series-metal: #199e70;
   --series-cash: #c98500;
   --series-other: #d55181;
+  --series-6: #008300;
+  --series-7: #9085e9;
+  --series-8: #e66767;
 }
 
 * {

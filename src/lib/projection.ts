@@ -13,6 +13,10 @@ export interface ProjectionPoint {
    * new principal in or out of the portfolio. `totalBase - contributedBase` is what a
    * "returns projection" calls growth: the part compounding actually added. */
   contributedBase: number;
+  /** Each convertible holding's own value this month, in base currency — holding id ->
+   * value. Sums to `totalBase`. Lets a view break the single total line down into the
+   * holdings that actually make it up, without re-running the simulation. */
+  byHolding: Record<string, number>;
 }
 
 export interface Milestone {
@@ -126,13 +130,16 @@ export function projectScenario(
     }
 
     let totalBase = 0;
+    const byHolding: Record<string, number> = {};
     for (const h of usable) {
       const nativeValue = nativeValues.get(h.id)!;
-      totalBase += convert(nativeValue, h.currency, baseCurrency, fxRates) ?? 0;
+      const converted = convert(nativeValue, h.currency, baseCurrency, fxRates) ?? 0;
+      byHolding[h.id] = converted;
+      totalBase += converted;
     }
 
     const dateStr = monthDate.toISOString().slice(0, 10);
-    series.push({ monthIndex: m, date: dateStr, totalBase, contributedBase });
+    series.push({ monthIndex: m, date: dateStr, totalBase, contributedBase, byHolding });
 
     if (m % 12 === 0 && milestoneMarks.includes(m / 12)) {
       milestones.push({ years: m / 12, date: dateStr, totalBase, contributedBase });

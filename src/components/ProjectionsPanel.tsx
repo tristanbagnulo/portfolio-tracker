@@ -4,6 +4,7 @@ import { projectScenarios } from "../lib/projection";
 import { formatCompact, formatMoney } from "../lib/format";
 import { ProjectionChart, scenarioColor } from "./ProjectionChart";
 import { ReturnsBreakdownChart } from "./ReturnsBreakdownChart";
+import { HoldingsBreakdownChart } from "./HoldingsBreakdownChart";
 import { ScenarioForm } from "./ScenarioForm";
 import { ScenarioManager } from "./ScenarioManager";
 
@@ -171,6 +172,36 @@ export function ProjectionsPanel({
             baseCurrency={baseCurrency}
             horizonYears={horizon}
             color={scenarioColor(breakdownIndex)}
+          />
+        </section>
+      )}
+
+      {breakdownResult && (
+        <section className="card">
+          <div className="toolbar" style={{ justifyContent: "space-between", marginBottom: 4 }}>
+            <h2 style={{ margin: 0 }}>By holding</h2>
+            {results.length > 1 && (
+              <select
+                value={breakdownResult.scenario.id}
+                onChange={(e) => setBreakdownScenarioId(e.target.value)}
+                style={{ fontSize: 13 }}
+              >
+                {results.map((r) => (
+                  <option key={r.scenario.id} value={r.scenario.id}>
+                    {r.scenario.name}
+                  </option>
+                ))}
+              </select>
+            )}
+          </div>
+          <p className="help" style={{ marginTop: -6, marginBottom: 12 }}>
+            {breakdownResult.scenario.name}'s projected total, split into the individual holdings that make it up.
+          </p>
+          <HoldingsBreakdownChart
+            series={breakdownResult.series}
+            holdings={holdings}
+            baseCurrency={baseCurrency}
+            horizonYears={horizon}
           />
         </section>
       )}
