@@ -17,6 +17,12 @@ export interface ProjectionPoint {
    * value. Sums to `totalBase`. Lets a view break the single total line down into the
    * holdings that actually make it up, without re-running the simulation. */
   byHolding: Record<string, number>;
+  /** Each holding's own net principal this month — its starting value plus contributions
+   * directly into it, shifted by transfers in/out (a transfer IS new principal for the
+   * destination holding and departing principal for the source, even though it nets to
+   * zero at the portfolio level — see `contributedBase`). `byHolding[id] -
+   * contributedByHolding[id]` is that one holding's own growth. Sums to `contributedBase`. */
+  contributedByHolding: Record<string, number>;
 }
 
 export interface Milestone {
@@ -87,7 +93,12 @@ export function projectScenario(
   for (const h of usable) nativeValues.set(h.id, h.value);
 
   let contributedBase = 0;
-  for (const h of usable) contributedBase += convert(h.value, h.currency, baseCurrency, fxRates) ?? 0;
+  const contributedByHolding: Record<string, number> = {};
+  for (const h of usable) {
+    const startBase = convert(h.value, h.currency, baseCurrency, fxRates) ?? 0;
+    contributedBase += startBase;
+    contributedByHolding[h.id] = startBase;
+  }
 
   const series: ProjectionPoint[] = [];
   const milestoneMarks = Array.from(new Set([1, 5, 10, 20, 30, horizonYears])).filter(
@@ -112,20 +123,34 @@ export function projectScenario(
         const afterTaxGrowth = prev * grossRate * (1 - taxRatePct / 100);
         const contribution = monthlyContributionFor(h, monthDate) * incomeGrowthFactor;
         nativeValues.set(h.id, prev + afterTaxGrowth + contribution);
-        contributedBase += convert(contribution, h.currency, baseCurrency, fxRates) ?? 0;
+        const contributionBase = convert(contribution, h.currency, baseCurrency, fxRates) ?? 0;
+        contributedBase += contributionBase;
+        contributedByHolding[h.id] += contributionBase;
       }
 
       // Transfers move already-tracked money between two holdings — applied after
       // growth/contributions so a transfer this month moves this month's contributed
-      // amount too, not last month's stale balance.
+      // amount too, not last month's stale balance. Clamped to what the source actually
+      // has: a schedule that would overdraw it just drains it to zero instead of going
+      // negative — real money can't be transferred out faster than it's there.
       for (const t of relevantTransfers) {
-        const amount = amountForMonth(t, monthDate);
-        if (amount === 0) continue;
+        const scheduled = amountForMonth(t, monthDate);
+        if (scheduled === 0) continue;
         const fromHolding = byId.get(t.fromHoldingId)!;
         const toHolding = byId.get(t.toHoldingId)!;
-        nativeValues.set(t.fromHoldingId, nativeValues.get(t.fromHoldingId)! - amount);
+        const available = nativeValues.get(t.fromHoldingId)!;
+        const amount = Math.min(scheduled, Math.max(0, available));
+        if (amount === 0) continue;
+        nativeValues.set(t.fromHoldingId, available - amount);
         const convertedToDest = convert(amount, fromHolding.currency, toHolding.currency, fxRates) ?? 0;
         nativeValues.set(t.toHoldingId, nativeValues.get(t.toHoldingId)! + convertedToDest);
+
+        // The transfer is principal leaving the source and arriving at the destination —
+        // nets to zero for contributedBase (not a new/withdrawn dollar), but each
+        // holding's own split needs to move with it.
+        const amountBase = convert(amount, fromHolding.currency, baseCurrency, fxRates) ?? 0;
+        contributedByHolding[t.fromHoldingId] -= amountBase;
+        contributedByHolding[t.toHoldingId] += amountBase;
       }
     }
 
@@ -139,7 +164,7 @@ export function projectScenario(
     }
 
     const dateStr = monthDate.toISOString().slice(0, 10);
-    series.push({ monthIndex: m, date: dateStr, totalBase, contributedBase, byHolding });
+    series.push({ monthIndex: m, date: dateStr, totalBase, contributedBase, byHolding, contributedByHolding: { ...contributedByHolding } });
 
     if (m % 12 === 0 && milestoneMarks.includes(m / 12)) {
       milestones.push({ years: m / 12, date: dateStr, totalBase, contributedBase });

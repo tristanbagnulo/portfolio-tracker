@@ -28,10 +28,15 @@ function applyDeltaToHolding(h: Holding, nativeDelta: number): Holding {
  *
  * Known simplification: if a transfer's `amount` changes while occurrences are still
  * unapplied (e.g. edited between infrequent app opens), every pending occurrence gets
- * summed at the CURRENT amount rather than whatever amount was in effect on each
+ * applied at the CURRENT amount rather than whatever amount was in effect on each
  * historical date — tracking amount history would be real added complexity for a case
  * that's rare in practice (checked at least once per session, via the same live-refresh
  * cycle that runs on every app open).
+ *
+ * Each occurrence is applied one at a time rather than as one lump sum, and clamped to
+ * whatever the source actually holds at that point — real money can't be moved out
+ * faster than it's there, so a source that runs dry partway through a catch-up just
+ * stops contributing from that occurrence on, instead of going negative.
  */
 export function applyDueTransfers(state: PortfolioState): PortfolioState {
   const today = new Date();
@@ -49,15 +54,25 @@ export function applyDueTransfers(state: PortfolioState): PortfolioState {
     const occurrences = occurrencesBetween(t, after, today);
     if (occurrences.length === 0) return t;
 
-    const totalAmount = t.amount * occurrences.length;
-    const convertedToDest = convert(totalAmount, from.currency, to.currency, state.settings.fxRates);
-    // No FX rate for this pair yet — leave lastAppliedDate untouched so this gets
-    // retried (and still catches up correctly) once a rate exists.
-    if (convertedToDest == null) return t;
+    // Checked once up front: if this currency pair has no rate at all, bail without
+    // advancing lastAppliedDate so every occurrence gets retried (and still catches up
+    // correctly) once a rate exists, rather than silently dropping them.
+    if (convert(t.amount, from.currency, to.currency, state.settings.fxRates) == null) return t;
+
+    let currentFrom = from;
+    let currentTo = to;
+    for (let i = 0; i < occurrences.length; i++) {
+      const available = Math.max(0, currentFrom.value);
+      const amount = Math.min(t.amount, available);
+      if (amount === 0) continue;
+      const convertedToDest = convert(amount, currentFrom.currency, currentTo.currency, state.settings.fxRates) ?? 0;
+      currentFrom = applyDeltaToHolding(currentFrom, -amount);
+      currentTo = applyDeltaToHolding(currentTo, convertedToDest);
+    }
 
     changedAny = true;
-    holdingsById.set(from.id, applyDeltaToHolding(from, -totalAmount));
-    holdingsById.set(to.id, applyDeltaToHolding(to, convertedToDest));
+    holdingsById.set(from.id, currentFrom);
+    holdingsById.set(to.id, currentTo);
     return { ...t, lastAppliedDate: today.toISOString().slice(0, 10) };
   });
 

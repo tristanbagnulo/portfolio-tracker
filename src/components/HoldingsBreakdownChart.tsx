@@ -61,6 +61,17 @@ export function HoldingsBreakdownChart({
     return sum;
   };
 
+  // Same split the "Returns breakdown" chart shows for the portfolio total, per band —
+  // how much of this holding's value is principal that was put in (directly, or shifted
+  // in by a transfer) versus what compounding actually grew it by.
+  const contributedFor = (point: ProjectionPoint, band: Band): number => {
+    if (band.id !== "__other__") return point.contributedByHolding[band.id] ?? 0;
+    const named = new Set(bands.filter((b) => b.id !== "__other__").map((b) => b.id));
+    let sum = 0;
+    for (const [id, v] of Object.entries(point.contributedByHolding)) if (!named.has(id)) sum += v;
+    return sum;
+  };
+
   // Cumulative stack boundaries per month, bottom-up — clamped at 0 per band so a
   // holding that dips negative (e.g. drawn down hard by transfers) doesn't distort the
   // stack shape; the total line elsewhere in Projections remains the source of truth.
@@ -118,6 +129,7 @@ export function HoldingsBreakdownChart({
   }
 
   const hoverPoint = hoverIndex != null ? series[hoverIndex] : null;
+  const lastPoint = series[series.length - 1];
 
   return (
     <div style={{ position: "relative" }}>
@@ -183,6 +195,43 @@ export function HoldingsBreakdownChart({
           </span>
         ))}
       </div>
+
+      {/* Visible by default (not hover-only) — contributed vs. growth per holding, at
+          the end of the horizon, so it's there to see without having to find the chart's
+          right edge. */}
+      {lastPoint && (
+        <table style={{ width: "100%", marginTop: 10, fontSize: 12, borderCollapse: "collapse" }}>
+          <thead>
+            <tr style={{ color: "var(--text-muted)", textAlign: "right" }}>
+              <th style={{ textAlign: "left", fontWeight: 400, paddingBottom: 4 }}>Holding</th>
+              <th style={{ fontWeight: 400, paddingBottom: 4 }}>Total</th>
+              <th style={{ fontWeight: 400, paddingBottom: 4 }}>Contributed</th>
+              <th style={{ fontWeight: 400, paddingBottom: 4 }}>Growth</th>
+            </tr>
+          </thead>
+          <tbody>
+            {bands.map((band) => {
+              const total = valueFor(lastPoint, band);
+              const contributed = contributedFor(lastPoint, band);
+              const growth = total - contributed;
+              return (
+                <tr key={band.id}>
+                  <td style={{ display: "flex", alignItems: "center", gap: 6, padding: "3px 0" }}>
+                    <span style={{ width: 8, height: 8, borderRadius: 2, background: band.color, flex: "none" }} />
+                    {band.name}
+                  </td>
+                  <td style={{ textAlign: "right" }}>{formatCompact(total, baseCurrency)}</td>
+                  <td style={{ textAlign: "right", color: "var(--text-secondary)" }}>{formatCompact(contributed, baseCurrency)}</td>
+                  <td style={{ textAlign: "right", color: growth < 0 ? "var(--critical)" : "var(--text-secondary)" }}>
+                    {growth < 0 ? "−" : ""}
+                    {formatCompact(Math.abs(growth), baseCurrency)}
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      )}
 
       {hoverPoint && hoverIndex != null && (
         <div
